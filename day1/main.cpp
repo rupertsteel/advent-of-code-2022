@@ -44,11 +44,17 @@ int main(int argc, char* argv[]) {
 	auto sumCalc1 = processed4 | std::views::transform([](auto rng) { return std::accumulate(rng.begin(), rng.end(), 0); });
 	auto sumMax = std::ranges::max(sumCalc1);
 
-	fmt::print("Max calories: {}\n", sumMax);
+	fmt::print("Part 1, Max calories: {}\n", sumMax);
 
-	// I Give up using ranges now,
-	auto processedEnd = processed4 | std::views::transform([](auto subRange) { return std::vector( subRange.begin(), subRange.end() ); });
-	auto output = std::vector(processedEnd.begin(), processedEnd.end() );
+	auto elfCaloriesVec = std::vector(sumCalc1.begin(), sumCalc1.end());
+
+	std::ranges::sort(elfCaloriesVec, std::ranges::greater());
+
+	auto top3 = elfCaloriesVec | std::views::take(3);
+	auto sumTop3 = std::accumulate(top3.begin(), top3.end(), 0);
+
+	fmt::print("Part 2, Top 3 sum calories: {}\n", sumTop3);
+
 
 
 
