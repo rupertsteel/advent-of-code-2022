@@ -68,11 +68,55 @@ int main(int argc, char* argv[]) {
 
 	auto mismatchSum = std::accumulate(mismatchedValues.begin(), mismatchedValues.end(), 0);
 
-	fmt::print("Part 1: {}", mismatchSum);
+	fmt::print("Part 1: {}\n", mismatchSum);
 
 
 	//fmt::print("Processed 2: {}\n", inputIntoRangePairs);
 
+	auto packsSortedUnique = inputIntoLines | std::views::transform([](std::string_view sv) {
+		std::string str{ sv };
+		std::ranges::sort(str);
+		auto res = std::ranges::unique(str);
+		str.erase(res.begin(), res.end());
+
+		return str;
+	});
+
+	auto group3 = packsSortedUnique | std::views::chunk(3);
+
+	auto commonItem = group3 | std::views::transform([](auto rng) -> std::string {
+		auto func = [](const std::string& left, const std::string& right) {
+			std::string common;
+			std::ranges::set_intersection(left, right, std::back_inserter(common));
+			return common;
+		};
+
+		auto commonRange = std::ranges::common_view{rng};
+
+		auto front = *commonRange.begin();
+
+		return std::accumulate(std::next(commonRange.begin()), commonRange.end(), front, func);
+	});
+
+	auto commonItemToSingle = commonItem | std::views::transform([](auto str) {
+		if (str.empty()) {
+			throw std::runtime_error("Unexpected");
+		}
+
+		return str[0];
+	});
+
+	auto commonItemValues = commonItemToSingle | std::views::transform([](char c) -> int {
+		if (c >= 'a' && c <= 'z') {
+			return c - 'a' + 1;
+		}
+
+		return c - 'A' + 27;
+	});
+
+	auto commonItemSum = std::accumulate(commonItemValues.begin(), commonItemValues.end(), 0);
+
+	fmt::print("Part 2: {}\n", commonItemSum);
 
 	return 0;
 }
