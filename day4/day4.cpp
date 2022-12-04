@@ -60,14 +60,28 @@ int main(int argc, char* argv[]) {
 		return  elf1FullyOverlapsElf2 || elf2FullyOverlapsElf1;
 	});
 
-	auto numFullOverlaps = std::ranges::distance(rangesWhereFullOverlapOccurs);
+	auto rangesWhereAnyOverlapOccurs = inputIntoRanges | std::views::filter([](auto input) {
+		auto elf1StartOverlapsElf2 = std::get<0>(input) >= std::get<2>(input) && std::get<0>(input) <= std::get<3>(input);
+		auto elf1EndOverlapsElf2 = std::get<1>(input) >= std::get<2>(input) && std::get<1>(input) <= std::get<3>(input);
 
+		auto elf2StartOverlapsElf1 = std::get<2>(input) >= std::get<0>(input) && std::get<2>(input) <= std::get<1>(input);
+		auto elf2EndOverlapsElf1 = std::get<3>(input) >= std::get<0>(input) && std::get<3>(input) <= std::get<1>(input);
+
+		auto elf1FullyOverlapsElf2 = std::get<0>(input) <= std::get<2>(input) && std::get<1>(input) >= std::get<3>(input);
+		auto elf2FullyOverlapsElf1 = std::get<2>(input) <= std::get<0>(input) && std::get<3>(input) >= std::get<1>(input);
+
+		return elf1StartOverlapsElf2 || elf1EndOverlapsElf2 || elf2StartOverlapsElf1 || elf2EndOverlapsElf1 || elf1FullyOverlapsElf2 || elf2FullyOverlapsElf1;
+	});
+
+	auto numFullOverlaps = std::ranges::distance(rangesWhereFullOverlapOccurs);
+	auto numOverlaps = std::ranges::distance(rangesWhereAnyOverlapOccurs);
 
 	auto end = std::chrono::high_resolution_clock::now();
 
 	fmt::print("Input into ranges: {}\n", inputIntoRanges);
 
 	fmt::print("Part 1, num overlap pairs: {}\n", numFullOverlaps);
+	fmt::print("Part 2, num overlap pairs: {}\n", numOverlaps);
 
 	auto dur = end - start;
 	fmt::print("Took {}\n", dur);
