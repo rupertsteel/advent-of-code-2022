@@ -7,8 +7,10 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
+#include <chrono>
 
 #include <fmt/ranges.h>
+#include <fmt/chrono.h>
 
 using namespace std::string_view_literals;
 
@@ -20,10 +22,9 @@ int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day2.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
 
+	auto start = std::chrono::high_resolution_clock::now();
+
 	auto inputIntoLines = std::string_view{ input } | std::views::split("\n"sv) | std::views::transform([](auto rng) { return std::string_view(rng.begin(), rng.end()); }) | std::views::filter([](auto str) { return !str.empty(); });
-
-	fmt::print("Processed 1: {}\n", inputIntoLines);
-
 
 	auto inputIntoGamePairs = inputIntoLines | std::views::transform([](std::string_view sv) {
 		auto left = sv[0] - 'A' + 1;
@@ -45,7 +46,7 @@ int main(int argc, char* argv[]) {
 
 	auto totalScore = std::accumulate(calcGameScoresFollowingStrategy.begin(), calcGameScoresFollowingStrategy.end(), 0);
 
-	fmt::print("Part 1, Score: {}\n", totalScore);
+	
 
 	auto inputIntoGamePairs2 = inputIntoLines | std::views::transform([](std::string_view sv) {
 		auto left = sv[0] - 'A' + 1;
@@ -59,7 +60,14 @@ int main(int argc, char* argv[]) {
 
 	auto totalScore2 = std::accumulate(calcGameScoresFollowingStrategy2.begin(), calcGameScoresFollowingStrategy2.end(), 0);
 
+	auto end = std::chrono::high_resolution_clock::now();
+
+	auto dur = end - start;
+
+	fmt::print("Processed 1: {}\n", inputIntoLines);
+	fmt::print("Part 1, Score: {}\n", totalScore);
 	fmt::print("Part 2, Score: {}\n", totalScore2);
+	fmt::print("Took {}\n", dur);
 
 	return 0;
 }

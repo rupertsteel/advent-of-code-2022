@@ -7,8 +7,10 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
+#include <chrono>
 
 #include <fmt/ranges.h>
+#include <fmt/chrono.h>
 
 using namespace std::string_view_literals;
 
@@ -20,9 +22,11 @@ int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day3.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
 
+	auto start = std::chrono::high_resolution_clock::now();
+
 	auto inputIntoLines = std::string_view{ input } | std::views::split("\n"sv) | std::views::transform([](auto rng) { return std::string_view(rng.begin(), rng.end()); }) | std::views::filter([](auto str) { return !str.empty(); });
 
-	fmt::print("Processed 1: {}\n", inputIntoLines);
+	//fmt::print("Processed 1: {}\n", inputIntoLines);
 
 	auto inputIntoRangePairs = inputIntoLines | std::views::transform([](std::string_view sv) {
 		auto leftView = sv.substr(0, sv.length() / 2);
@@ -67,8 +71,6 @@ int main(int argc, char* argv[]) {
 	auto mismatchedValues = mismatchesToValues; // | std::views::join;
 
 	auto mismatchSum = std::accumulate(mismatchedValues.begin(), mismatchedValues.end(), 0);
-
-	fmt::print("Part 1: {}\n", mismatchSum);
 
 
 	//fmt::print("Processed 2: {}\n", inputIntoRangePairs);
@@ -116,7 +118,13 @@ int main(int argc, char* argv[]) {
 
 	auto commonItemSum = std::accumulate(commonItemValues.begin(), commonItemValues.end(), 0);
 
+	auto end = std::chrono::high_resolution_clock::now();
+
+	fmt::print("Part 1: {}\n", mismatchSum);
 	fmt::print("Part 2: {}\n", commonItemSum);
+
+	auto dur = end - start;
+	fmt::print("Took {}\n", dur);
 
 	return 0;
 }
