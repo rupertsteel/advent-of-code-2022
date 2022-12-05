@@ -86,6 +86,7 @@ int main(int argc, char* argv[]) {
 	});
 
 	for (auto command : processedCommands) {
+#if 0 // Part 1
 		for (int i = 0; i < command.count; i++) {
 			if (stacks[command.from].empty()) {
 				break;
@@ -93,6 +94,22 @@ int main(int argc, char* argv[]) {
 
 			stacks[command.to].push_back(stacks[command.from].back());
 			stacks[command.from].pop_back();
+		}
+#endif
+		std::vector<char> tempStack;
+
+		for (int i = 0; i < command.count; i++) {
+			if (stacks[command.from].empty()) {
+				break;
+			}
+
+			tempStack.push_back(stacks[command.from].back());
+			stacks[command.from].pop_back();
+		}
+
+		while (!tempStack.empty()) {
+			stacks[command.to].push_back(tempStack.back());
+			tempStack.pop_back();
 		}
 	}
 
