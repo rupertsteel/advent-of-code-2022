@@ -86,3 +86,8 @@ add_executable(day4
     day4/day4.cpp
 )
 target_link_libraries(day4 PUBLIC common)
+
+add_executable(day5
+    day5/day5.cpp
+)
+target_link_libraries(day5 PUBLIC common)
