@@ -44,12 +44,30 @@ int main(int argc, char* argv[]) {
 		return true;
 	});
 
+	auto slide14 = inputSv | std::views::slide(14) | std::views::transform([](auto rng) {
+		auto vec = rng | std::ranges::to<std::vector>();
+
+		std::ranges::sort(vec);
+
+		for (auto&& elems : vec | std::views::slide(2)) {
+			if (elems[0] == elems[1]) {
+				return false;
+			}
+		}
+
+		return true;
+	});
+
 	auto offset = std::ranges::find(slide, true);
 	auto offsetCount = std::distance(slide.begin(), offset) + 4;
+
+	auto offset14 = std::ranges::find(slide14, true);
+	auto offsetCount14 = std::distance(slide14.begin(), offset14) + 14;
 
 	auto end = std::chrono::high_resolution_clock::now();
 
 	fmt::print("Part 1 offset: {}\n", offsetCount);
+	fmt::print("Part 2 offset: {}\n", offsetCount14);
 
 	auto dur = end - start;
 	fmt::print("Took {}\n", dur);
