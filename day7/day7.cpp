@@ -16,14 +16,8 @@
 
 using namespace std::string_view_literals;
 
-struct Command {
-	int count;
-	int from;
-	int to;
-};
-
 std::string makeFileString(const std::vector<std::string_view>& parentPath, std::string_view itemPath) {
-	std::string outStr = "/";
+	std::string outStr = "";
 
 	auto v = parentPath | std::views::join_with("/"sv);
 
@@ -43,7 +37,7 @@ std::vector<std::string> getAllDirectories(std::string str) {
 		auto pos = str.find_last_of('/');
 		str.erase(pos, str.size());
 
-		returnVec.push_back(str);
+		returnVec.push_back(str + "/");
 	} while (str.find('/') != std::string::npos);
 
 	return returnVec;
@@ -60,6 +54,7 @@ int main(int argc, char* argv[]) {
 
 	// get file sizes
 	std::vector<std::string_view> currentPath;
+	currentPath.push_back("");
 
 	std::map<std::string, uint64_t> fileSizeMap;
 
@@ -83,10 +78,11 @@ int main(int argc, char* argv[]) {
 
 		if (line == "$ cd /") {
 			currentPath.clear();
+			currentPath.push_back("");
 		} else if (line == "$ cd ..") {
 			currentPath.pop_back();
 		} else if (line.starts_with("$ cd")) {
-			auto pushPath = line.substr(4);
+			auto pushPath = line.substr(5);
 			currentPath.push_back(pushPath);
 		} else if (line == "$ ls") {
 			inLsListing = true;
@@ -113,9 +109,32 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	auto diskUsage = directorySizeMap.at("/");
+	auto diskFree = 70000000 - diskUsage;
+	auto diskNeeded = 30000000 - diskFree;
+
+	fmt::print("diskUsage:  {}\n", diskUsage);
+	fmt::print("diskFree:   {}\n", diskFree);
+	fmt::print("diskNeeded: {}\n", diskNeeded);
+
+	std::map<std::string, uint64_t>::const_pointer smallestDirOverTarget = nullptr;
+	for (auto it = directorySizeMap.begin(); it != directorySizeMap.end(); ++it) {
+		if (it->second >= diskNeeded) {
+			if (smallestDirOverTarget == nullptr) {
+				smallestDirOverTarget = &(*it);
+			} else if (it->second < smallestDirOverTarget->second) {
+				smallestDirOverTarget = &(*it);
+			}
+		}
+	}
+
 	auto end = std::chrono::high_resolution_clock::now();
 
 	fmt::print("Part 1: {}\n", totalSize);
+
+	if (smallestDirOverTarget) {
+		fmt::print("Part 2: {}    ---  {}\n", smallestDirOverTarget->first, smallestDirOverTarget->second);
+	}
 
 
 	auto dur = end - start;
