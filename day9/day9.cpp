@@ -37,6 +37,11 @@ struct std::hash<std::pair<int, int>> {
 	}
 };
 
+struct Position {
+	int x = 0;
+	int y = y;
+};
+
 int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day9.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
@@ -75,29 +80,35 @@ int main(int argc, char* argv[]) {
 			return ins;
 		});
 
-	auto headX = 0;
-	auto headY = 0;
-	auto tailX = 0;
-	auto tailY = 0;
+	// auto ropeLength = 1; // part 1
+	auto ropeLength = 9;
+	std::vector<Position> positions(ropeLength + 1);
 
 	std::unordered_set<std::pair<int, int>> visitedLocations;
 
 	for (auto instruction : inputIntoInstructions) {
 		for (int i = 0; i < instruction.count; i++) {
-			headX += instruction.diffX;
-			headY += instruction.diffY;
+			positions.front().x += instruction.diffX;
+			positions.front().y += instruction.diffY;
 
-			auto diffX = headX - tailX;
-			auto diffY = headY - tailY;
+			for (int j = 0; j < ropeLength; j++) {
+				auto& headX = positions[j].x;
+				auto& headY = positions[j].y;
+				auto& tailX = positions[j + 1].x;
+				auto& tailY = positions[j + 1].y;
 
-			auto needMove = std::abs(diffX) > 1 || std::abs(diffY) > 1;
+				auto diffX = headX - tailX;
+				auto diffY = headY - tailY;
 
-			if (needMove) {
-				tailX += std::clamp(diffX, -1, 1);
-				tailY += std::clamp(diffY, -1, 1);
+				auto needMove = std::abs(diffX) > 1 || std::abs(diffY) > 1;
+
+				if (needMove) {
+					tailX += std::clamp(diffX, -1, 1);
+					tailY += std::clamp(diffY, -1, 1);
+				}
 			}
 
-			visitedLocations.emplace(tailX, tailY);
+			visitedLocations.emplace(positions.back().x, positions.back().y);
 		}
 	}
 
