@@ -106,3 +106,10 @@ add_executable(day8
     day8/day8.cpp
 )
 target_link_libraries(day8 PUBLIC common)
+
+# Space for day 9
+
+add_executable(day10
+    day10/day10.cpp
+)
+target_link_libraries(day10 PUBLIC common)
