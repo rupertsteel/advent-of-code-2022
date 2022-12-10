@@ -37,18 +37,38 @@ int main(int argc, char* argv[]) {
 
 	auto printCycleIfNeeded = [&]() {
 		if (printCycles.contains(cycle)) {
-			fmt::print("Cycle {}, x: {}, signal {}\n", cycle, xReg, cycle * xReg);
-
 			signalStrengthSum += cycle * xReg;
+		}
+
+		
+	};
+
+	auto printScreen = [&]() {
+		auto xPosition = (cycle - 1) % 40;
+
+		auto xDiff = xReg - xPosition;
+		if (xDiff >= -1 && xDiff <= 1) {
+			fmt::print("#");
+		}
+		else {
+			fmt::print(" ");
+		}
+
+		if (xPosition == 39) {
+			fmt::print("\n");
 		}
 	};
 
 	for (auto ins : inputIntoLines) {
 		if (ins == "noop") {
+			printScreen();
+
 			cycle++;
 
 			printCycleIfNeeded();
 		} else {
+			printScreen();
+
 			cycle++;
 
 			printCycleIfNeeded();
@@ -56,6 +76,8 @@ int main(int argc, char* argv[]) {
 			auto valueSs = ins.substr(5);
 			std::string valueStr{ valueSs };
 			auto value = std::stoi(valueStr);
+
+			printScreen();
 
 			cycle++;
 			xReg += value;
