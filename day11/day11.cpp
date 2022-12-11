@@ -23,7 +23,7 @@ using namespace std::string_view_literals;
 
 struct Monkey {
 
-	std::vector<int> items;
+	std::vector<uint64_t> items;
 
 	// operation
 	// new = old <OP> <old|CONSTANT>
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
 			} else if (line.starts_with("  Starting items")) {
 				auto itemSv = line.substr(18);
 
-				monkey.items = itemSv | std::views::split(", "sv) | std::views::transform([](auto rng) { return std::string_view(rng.begin(), rng.end()); }) | std::views::transform([](auto s) {return std::stoi(std::string(s)); }) | std::ranges::to<std::vector>();
+				monkey.items = itemSv | std::views::split(", "sv) | std::views::transform([](auto rng) { return std::string_view(rng.begin(), rng.end()); }) | std::views::transform([](auto s) {return std::stoull(std::string(s)); }) | std::ranges::to<std::vector>();
 			} else if (line.starts_with("  Operation")) {
 				monkey.op = line[23];
 				auto rhsSv = line.substr(25);
@@ -120,10 +120,16 @@ int main(int argc, char* argv[]) {
 
 	std::map<int, Monkey> monkeys = monkeysParsed | std::ranges::to<std::map>();
 
-	std::map<int, int> inspectionCounts;
+	auto monkeyDivisors = monkeys | std::views::values | std::views::transform([](auto& m) {return m.divisor; }) | std::views::common;
+	auto sanityModClamp = std::accumulate(monkeyDivisors.begin(), monkeyDivisors.end(), 1, std::multiplies<>());
 
+	std::map<int, uint64_t> inspectionCounts;
 
+#if 0 // part 1
 	constexpr int rounds = 20;
+#else
+	constexpr int rounds = 10000;
+#endif
 
 	for (int i = 0; i < rounds; i++) {
 
@@ -141,7 +147,11 @@ int main(int argc, char* argv[]) {
 					item = item * monkey.rhs.value_or(item);
 				}
 
+#if 0 // part 1
 				item /= 3;
+#else
+				item %= sanityModClamp;
+#endif
 				if (item % monkey.divisor == 0) {
 					monkeys.at(monkey.testTrueThrowMonkey).items.push_back(item);
 				}
@@ -150,6 +160,9 @@ int main(int argc, char* argv[]) {
 				}
 			}
 		}
+
+		//fmt::print("\n\n\nRound {} finished\n", i);
+		//fmt::print("{}", monkeys);
 	}
 	
 	auto end = std::chrono::high_resolution_clock::now();
