@@ -23,8 +23,9 @@
 using namespace std::string_view_literals;
 
 struct PathData {
-	std::optional<int> distFromStart;
+	std::optional<int> distToEnd;
 	bool isStart = false;
+	bool isEnd = false;
 };
 
 int main(int argc, char* argv[]) {
@@ -77,10 +78,11 @@ int main(int argc, char* argv[]) {
 	};
 
 	arrLookup(pathData, startX, startY).isStart = true;
+	arrLookup(pathData, endX, endY).isEnd = true;
 
 	std::deque<std::pair<int, int>> locationsToProcess;
 
-	locationsToProcess.push_back(std::make_pair(startX, startY));
+	locationsToProcess.push_back(std::make_pair(endX, endY));
 
 	while (!locationsToProcess.empty()) {
 		auto loc = locationsToProcess.front();
@@ -88,8 +90,8 @@ int main(int argc, char* argv[]) {
 
 		bool updated = false;
 
-		if (arrLookup(pathData, loc.first, loc.second).isStart) {
-			arrLookup(pathData, loc.first, loc.second).distFromStart = 0;
+		if (arrLookup(pathData, loc.first, loc.second).isEnd) {
+			arrLookup(pathData, loc.first, loc.second).distToEnd = 0;
 			updated = true;
 		} else {
 			// if left exists
@@ -106,14 +108,14 @@ int main(int argc, char* argv[]) {
 					auto& currentPathData = arrLookup(pathData, loc.first, loc.second);
 					auto& testPathData = arrLookup(pathData, testX, testY);
 
-					bool targetCanTravelHere = arrLookup(heightData, loc.first, loc.second) - arrLookup(heightData, testX, testY) <= 1;
+					bool targetCanTravelHere = arrLookup(heightData, loc.first, loc.second) - arrLookup(heightData, testX, testY) >= -1;
 
 					if (targetCanTravelHere) {
-						if (!currentPathData.distFromStart && testPathData.distFromStart) {
-							currentPathData.distFromStart = testPathData.distFromStart.value() + 1;
+						if (!currentPathData.distToEnd && testPathData.distToEnd) {
+							currentPathData.distToEnd = testPathData.distToEnd.value() + 1;
 							updated = true;
-						} else if (testPathData.distFromStart && currentPathData.distFromStart.value() > testPathData.distFromStart.value() + 1) {
-							currentPathData.distFromStart.value() = testPathData.distFromStart.value() + 1;
+						} else if (testPathData.distToEnd && currentPathData.distToEnd.value() > testPathData.distToEnd.value() + 1) {
+							currentPathData.distToEnd.value() = testPathData.distToEnd.value() + 1;
 							updated = true;
 						}
 					}
@@ -142,10 +144,23 @@ int main(int argc, char* argv[]) {
 			enqueueUpdate(0, 1);
 		}
 	}
+
+	auto minDistFromLowestElevation = 999999;
+	for (int i = 0; i < pathData.size(); i++) {
+		if (heightData[i] == 0) {
+			if (pathData[i].distToEnd) {
+				if (pathData[i].distToEnd.value() < minDistFromLowestElevation) {
+					minDistFromLowestElevation = pathData[i].distToEnd.value();
+				}
+			}
+		}
+	}
 	
 	auto end = std::chrono::high_resolution_clock::now();
 
-	fmt::print("Part 1: Dist to finish {}\n", arrLookup(pathData, endX, endY).distFromStart.value());
+	fmt::print("Part 1: Dist to finish {}\n", arrLookup(pathData, startX, startY).distToEnd.value());
+
+	fmt::print("part 2: min dist {}\n", minDistFromLowestElevation);
 
 
 	auto dur = end - start;
