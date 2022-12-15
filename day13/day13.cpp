@@ -146,6 +146,46 @@ std::strong_ordering operator<=>(const ListItem& left, const ListItem& right) {
 	return left <=> packedItem;
 }
 
+bool isMarkerPacket(const ListItem& item, int toMatch) {
+	if (item.item.index() != 1) {
+		return false;
+	}
+
+	auto nested1 = std::get<1>(item.item);
+
+	if (nested1.size() != 1) {
+		return false;
+	}
+
+	if (nested1[0].item.index() != 1) {
+		return false;
+	}
+
+	auto nested2 = std::get<1>(nested1[0].item);
+
+	if (nested2.size() != 1) {
+		return false;
+	}
+
+	if (nested2[0].item.index() != 1) {
+		return false;
+	}
+
+	auto nested3 = std::get<1>(nested2[0].item);
+
+	if (nested3.size() != 1) {
+		return false;
+	}
+
+	if (nested3[0].item.index() != 0) {
+		return false;
+	}
+
+	auto nestedVal = std::get<0>(nested3[0].item);
+
+	return nestedVal == toMatch;
+}
+
 
 int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day13.txt");
@@ -165,13 +205,16 @@ int main(int argc, char* argv[]) {
 
 	int lessPairNumberSum = 0;
 
+	std::vector<ListItem> items;
+
+
 	for (auto pair : pairs) {
 		
 
 		auto leftList = parseList(pair.front());
 		auto rightList = parseList(*std::ranges::next(pair.begin()));
 
-		//fmt::print("Left:  {}\nRight: {}\n", leftList, rightList);
+		fmt::print("Left:  {}\nRight: {}\n", leftList, rightList);
 
 		auto cmp = leftList <=> rightList;
 
@@ -181,14 +224,37 @@ int main(int argc, char* argv[]) {
 
 		//fmt::print("Pair {}: {}: {}\n", pairNumber, pair, cmp._Value);
 
+		items.push_back(leftList);
+		items.push_back(rightList);
+
 		pairNumber++;
 	}
-	
 
+	items.push_back(parseList("[[2]]"));
+	items.push_back(parseList("[[6]]"));
+	
+	std::ranges::sort(items, std::less());
+
+	int divider2Index = -1;
+	int divider6Index = -1;
+
+	for (int i = 0; i < items.size(); i++) {
+		if (isMarkerPacket(items[i], 2)) {
+			divider2Index = i;
+		}
+		if (isMarkerPacket(items[i], 6)) {
+			divider6Index = i;
+		}
+	}
+
+	auto a = parseList("[[2]]");
+	fmt::print("Marker packet function works: {}\n", isMarkerPacket(a, 2));
 	
 	auto end = std::chrono::high_resolution_clock::now();
 
 	fmt::print("Pair number sum: {}\n", lessPairNumberSum);
+
+	fmt::print("Part 2, decoder key: {}\n", (divider2Index + 1) * (divider6Index + 1));
 
 	auto dur = end - start;
 	fmt::print("Took {}\n", dur);
