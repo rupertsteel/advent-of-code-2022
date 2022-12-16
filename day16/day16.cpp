@@ -35,6 +35,7 @@ struct SolutionData {
 	int scoreLowerBound;
 	int scoreUpperBound;
 	std::string currentNode;
+	std::string prevNode;
 
 	std::set<std::string> openValves;
 	std::set<std::string> valvesStillToOpen;
@@ -143,7 +144,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	std::vector<SolutionData> wipSolutions;
-	wipSolutions.emplace_back(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, "AA", valvesToOpen, 30), "AA", {}, valvesToOpen});
+	wipSolutions.emplace_back(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, "AA", valvesToOpen, 30), "AA", "", {}, valvesToOpen});
 
 	for (int i = 0; i < 30; i++) {
 		std::vector<SolutionData> newSolutions;
@@ -182,16 +183,23 @@ int main(int argc, char* argv[]) {
 				newSolution.scoreLowerBound += graph.at(solution.currentNode).flow_rate * (30 - newSolution.minute);
 				newSolution.updateUpperBound(graph);
 				lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-				newSolutions.push_back(newSolution);
+				newSolution.prevNode.erase();
 
 				highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
+
+				newSolutions.push_back(newSolution);
 			}
 
 			for (auto nextNode : graph.at(solution.currentNode).nextNodes) {
+				if (nextNode == solution.prevNode) {
+					continue;
+				}
+
 				auto newSolution = solution;
 
 				newSolution.minute++;
 				newSolution.currentNode = nextNode;
+				newSolution.prevNode = solution.currentNode;
 
 				newSolution.updateUpperBound(graph);
 				lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
