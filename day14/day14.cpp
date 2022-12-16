@@ -85,14 +85,20 @@ int main(int argc, char* argv[]) {
 	// Second map handles vertical rows, allows us to use map lookup functions for fast sand falling.
 	std::map<int, std::map<int, CellType>> grid;
 
+	int maxY = 0;
+
 	// Place the walls
 	for (auto line : inputIntoRangesOfPoints) {
 
 		auto lastPoint = line.front();
 
+		maxY = std::max(maxY, lastPoint.y);
+
 		addWall(grid, lastPoint);
 
 		for (auto point : line | std::views::drop(1)) {
+			maxY = std::max(maxY, point.y);
+
 			auto diff = getDiff(point, lastPoint);
 
 			auto currentPoint = lastPoint;
@@ -107,6 +113,16 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	// part 2, add bottom plane
+	// we don't need a infinite plane, we just need one big enough that all sand will be stopped on it.
+	// sand travels at most 45 degrees, so we need points from [500 - (maxY + 2) - 1, 500 + (maxY + 2) + 1] ?, but lets add on a couple more, they are basically free
+	int planeStart = 500 - (maxY + 2) - 5;
+	int planeEnd = 500 + (maxY + 2) + 5;
+
+	for (int i = planeStart; i < planeEnd; i++) {
+		addWall(grid, Point{ i, maxY + 2 });
+	}
+
 	int numGrainsPlaced = 0;
 
 	bool finished = false;
@@ -114,6 +130,10 @@ int main(int argc, char* argv[]) {
 	while (!finished) {
 		int currentX = 500;
 		int currentY = 0;
+
+		if (grid[currentX].contains(currentY)) {
+			break; // part 2 stop
+		}
 
 		while (true) {
 			// drop grain
