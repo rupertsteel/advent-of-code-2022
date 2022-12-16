@@ -22,8 +22,13 @@
 
 #include <gsl/gsl-lite.hpp>
 
+#include <indicators/progress_bar.hpp>
+
 using namespace std::string_view_literals;
 using namespace std::string_literals;
+
+// constexpr int numRounds = 30; // part 1
+constexpr int numRounds = 26; // part 2
 
 struct Node {
 	int flow_rate;
@@ -36,6 +41,9 @@ struct SolutionData {
 	int scoreUpperBound;
 	std::string currentNode;
 	std::string prevNode;
+
+	std::string agent2CurrentNode;
+	std::string agent2PrevNode;
 
 	std::set<std::string> openValves;
 	std::set<std::string> valvesStillToOpen;
@@ -61,7 +69,7 @@ int calcPossibleScore(std::vector<int> valveScores, int rounds) {
 	return score;
 }
 
-int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLowerBound, const std::string& currentNodeName, const std::set<std::string>& valvesToOpen, int turns) {
+int calcScoreUpperBoundPart1(const std::map<std::string, Node>& map, int currentLowerBound, const std::string& currentNodeName, const std::set<std::string>& valvesToOpen, int turns) {
 	// the upper bound is
 	// lowerBound + the max score we could get with opening the other valves
 
@@ -106,8 +114,45 @@ int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLower
 	return currentLowerBound + std::max(scoreForPickingBiggestValveFirst, scoreForPickingCurrentValveFirst);
 }
 
+int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLowerBound, const std::string& currentNodeName, const std::set<std::string>& valvesToOpen, int turns) {
+	// part 2 upper bound
+	// lets just make a simpler calculation, since not allowing agents to move to their previous node without doing something leads to the biggest reduction in the number of nodes.
+
+	if (valvesToOpen.empty()) {
+		return currentLowerBound;
+	}
+
+	std::vector<int> valveOpenOrder;
+	for (auto& valve : valvesToOpen) {
+		valveOpenOrder.push_back(map.at(valve).flow_rate);
+	}
+
+	std::ranges::sort(valveOpenOrder, std::ranges::greater());
+
+	// lest imagine both agents are at the best nodes to open next,
+	// so we give them turns + 1
+
+	int score = 0;
+
+	int calcRounds = turns + 1;
+
+	while (!valveOpenOrder.empty() && calcRounds > 2) {
+		score += valveOpenOrder.front() * (calcRounds - 2);
+		valveOpenOrder.erase(valveOpenOrder.begin());
+
+		if (!valveOpenOrder.empty()) {
+			score += valveOpenOrder.front() * (calcRounds - 2);
+			valveOpenOrder.erase(valveOpenOrder.begin());
+		}
+
+		calcRounds -= 2;
+	}
+
+	return currentLowerBound + score;
+}
+
 void SolutionData::updateUpperBound(const std::map<std::string, Node>& map) {
-	scoreUpperBound = calcScoreUpperBound(map, scoreLowerBound, currentNode, valvesStillToOpen, 30 - minute);
+	scoreUpperBound = calcScoreUpperBound(map, scoreLowerBound, currentNode, valvesStillToOpen, numRounds - minute);
 
 }
 
@@ -144,9 +189,9 @@ int main(int argc, char* argv[]) {
 	}
 
 	std::vector<SolutionData> wipSolutions;
-	wipSolutions.emplace_back(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, "AA", valvesToOpen, 30), "AA", "", {}, valvesToOpen});
+	wipSolutions.emplace_back(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, "AA", valvesToOpen, numRounds), "AA", "", "AA", "", {}, valvesToOpen});
 
-	for (int i = 0; i < 30; i++) {
+	for (int i = 0; i < numRounds; i++) {
 		std::vector<SolutionData> newSolutions;
 
 		// for each solution
@@ -159,12 +204,24 @@ int main(int argc, char* argv[]) {
 		int lowestUpperBound = std::numeric_limits<int>::max();
 		int highestUpperBound = 0;
 
-		for (const auto& solution : wipSolutions) {
+		size_t solutionsRemovedBeforeAdd = 0;
+
+		using namespace indicators;
+		ProgressBar bar{
+			option::BarWidth{60},
+			option::ForegroundColor{Color::white},
+			option::MaxProgress{wipSolutions.size()}
+		};
+
+		//for (const auto& solution : wipSolutions) {
+		for (size_t j = 0; j < wipSolutions.size(); j++) {
+			auto& solution = wipSolutions[j];
+
 			lowestLowerBound = std::min(lowestLowerBound, solution.scoreLowerBound);
 			highestLowerBound = std::max(highestLowerBound, solution.scoreLowerBound);
 			highestUpperBound = std::max(highestUpperBound, solution.scoreUpperBound);
 			lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-
+			
 			// handle the case where we have finished
 			if (solution.valvesStillToOpen.empty()) {
 				auto newSolution = solution;
@@ -173,39 +230,141 @@ int main(int argc, char* argv[]) {
 				continue;
 			}
 
-			// if the valve is unopened, open it
-			if (solution.valvesStillToOpen.contains(solution.currentNode)) {
-				auto newSolution = solution;
-				newSolution.openValves.emplace(solution.currentNode);
-				newSolution.valvesStillToOpen.erase(solution.currentNode);
+			// handle both agents open
+			{
+				if (solution.valvesStillToOpen.contains(solution.currentNode) && solution.valvesStillToOpen.contains(solution.agent2CurrentNode) && solution.currentNode != solution.agent2CurrentNode) {
+					// open both valves
+					auto newSolution = solution;
+					newSolution.openValves.emplace(solution.currentNode);
+					newSolution.valvesStillToOpen.erase(solution.currentNode);
+					newSolution.openValves.emplace(solution.agent2CurrentNode);
+					newSolution.valvesStillToOpen.erase(solution.agent2CurrentNode);
 
-				newSolution.minute++;
-				newSolution.scoreLowerBound += graph.at(solution.currentNode).flow_rate * (30 - newSolution.minute);
-				newSolution.updateUpperBound(graph);
-				lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-				newSolution.prevNode.erase();
+					newSolution.minute++;
+					newSolution.scoreLowerBound += graph.at(solution.currentNode).flow_rate * (numRounds - newSolution.minute);
+					newSolution.scoreLowerBound += graph.at(solution.agent2CurrentNode).flow_rate * (numRounds - newSolution.minute);
 
-				highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
+					newSolution.updateUpperBound(graph);
+					lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
+					newSolution.prevNode.erase();
+					newSolution.agent2PrevNode.erase();
 
-				newSolutions.push_back(newSolution);
+					highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
+
+					newSolutions.push_back(newSolution);
+				}
+			}
+			// handle agent 1 open, agent 2 move
+			{
+				if (solution.valvesStillToOpen.contains(solution.currentNode)) {
+					for (auto nextNode : graph.at(solution.agent2CurrentNode).nextNodes) {
+						// if there is only 1 valve to open, allow agents to travel anywhere to prevent them from getting stuck
+						if (nextNode == solution.agent2PrevNode && solution.valvesStillToOpen.size() > 1) {
+							continue;
+						}
+
+						auto newSolution = solution;
+						newSolution.openValves.emplace(solution.currentNode);
+						newSolution.valvesStillToOpen.erase(solution.currentNode);
+
+						newSolution.agent2CurrentNode = nextNode;
+						newSolution.agent2PrevNode = solution.agent2CurrentNode;
+
+						newSolution.minute++;
+						newSolution.scoreLowerBound += graph.at(solution.currentNode).flow_rate * (numRounds - newSolution.minute);
+						newSolution.updateUpperBound(graph);
+
+						if (newSolution.scoreUpperBound < highestLowerBound) {
+							solutionsRemovedBeforeAdd++;
+							continue;
+						}
+
+						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
+						newSolution.prevNode.erase();
+
+						highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
+
+						newSolutions.push_back(newSolution);
+					}
+				}
 			}
 
-			for (auto nextNode : graph.at(solution.currentNode).nextNodes) {
-				if (nextNode == solution.prevNode) {
-					continue;
+			// handle agent 1 move, agent 2 open
+			{
+				if (solution.valvesStillToOpen.contains(solution.agent2CurrentNode)) {
+					for (auto nextNode : graph.at(solution.currentNode).nextNodes) {
+						if (nextNode == solution.prevNode && solution.valvesStillToOpen.size() > 1) {
+							continue;
+						}
+
+						auto newSolution = solution;
+						newSolution.openValves.emplace(solution.agent2CurrentNode);
+						newSolution.valvesStillToOpen.erase(solution.agent2CurrentNode);
+
+						newSolution.minute++;
+						newSolution.scoreLowerBound += graph.at(solution.agent2CurrentNode).flow_rate * (numRounds - newSolution.minute);
+						newSolution.updateUpperBound(graph);
+
+						newSolution.currentNode = nextNode;
+						newSolution.prevNode = solution.currentNode;
+
+						if (newSolution.scoreUpperBound < highestLowerBound) {
+							solutionsRemovedBeforeAdd++;
+							continue;
+						}
+
+						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
+						newSolution.prevNode.erase();
+
+						highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
+
+						newSolutions.push_back(newSolution);
+					}
 				}
+			}
 
-				auto newSolution = solution;
+			// handle both agents move
+			{
+				for (auto agent1NextNode : graph.at(solution.currentNode).nextNodes) {
+					if (agent1NextNode == solution.prevNode && solution.valvesStillToOpen.size() > 1) {
+						continue;
+					}
 
-				newSolution.minute++;
-				newSolution.currentNode = nextNode;
-				newSolution.prevNode = solution.currentNode;
+					for (auto agent2NextNode : graph.at(solution.agent2CurrentNode).nextNodes) {
+						if (agent2NextNode == solution.agent2PrevNode && solution.valvesStillToOpen.size() > 1) {
+							continue;
+						}
 
-				newSolution.updateUpperBound(graph);
-				lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-				newSolutions.push_back(newSolution);
+						auto newSolution = solution;
+
+						newSolution.minute++;
+						newSolution.currentNode = agent1NextNode;
+						newSolution.prevNode = solution.currentNode;
+						newSolution.agent2CurrentNode = agent2NextNode;
+						newSolution.agent2PrevNode = solution.agent2CurrentNode;
+
+						newSolution.updateUpperBound(graph);
+
+						if (newSolution.scoreUpperBound < highestLowerBound) {
+							solutionsRemovedBeforeAdd++;
+							continue;
+						}
+
+						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
+						newSolutions.push_back(newSolution);
+					}
+				}
+			}
+
+			
+			if (j % 1000 == 0) {
+				bar.set_progress(j);
+				bar.set_option(option::PostfixText{ std::to_string(j) + "/" + std::to_string(wipSolutions.size()) });
 			}
 		}
+
+		bar.set_option(option::PostfixText{ std::to_string(wipSolutions.size()) + "/" + std::to_string(wipSolutions.size()) });
+		bar.mark_as_completed();
 
 		auto solutionsBeforeRemove = newSolutions.size();
 
@@ -216,9 +375,9 @@ int main(int argc, char* argv[]) {
 		auto solutionsAfterRemove = newSolutions.size();
 
 		fmt::print("Round {:2} LL: {:5} HL: {:5} LH: {:5} HH: {:5} #Sol: {:7} #Rem: {:7}\n", i, lowestLowerBound, highestLowerBound, lowestUpperBound, highestUpperBound, newSolutions.size(),
-			solutionsBeforeRemove - solutionsAfterRemove);
+			solutionsBeforeRemove - solutionsAfterRemove + solutionsRemovedBeforeAdd);
 
-		wipSolutions = newSolutions;
+		wipSolutions = std::move(newSolutions);
 	}
 
 	auto highestScore = std::ranges::max(wipSolutions | std::views::transform([](auto s) { return s.scoreLowerBound; }));

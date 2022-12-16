@@ -17,6 +17,7 @@
     },
     "stb",
     "tl-optional",
-    "tl-expected"
+    "tl-expected",
+    "indicators"
   ]
 }
