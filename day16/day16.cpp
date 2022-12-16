@@ -24,6 +24,8 @@
 
 #include <indicators/progress_bar.hpp>
 
+#include <boost/container/flat_set.hpp>
+
 using namespace std::string_view_literals;
 using namespace std::string_literals;
 
@@ -45,8 +47,10 @@ struct SolutionData {
 	std::string agent2CurrentNode;
 	std::string agent2PrevNode;
 
-	std::set<std::string> openValves;
-	std::set<std::string> valvesStillToOpen;
+	//std::set<std::string> openValves;
+	//std::set<std::string> valvesStillToOpen;
+	boost::container::flat_set<std::string> openValves;
+	boost::container::flat_set<std::string> valvesStillToOpen;
 
 	void updateUpperBound(const std::map<std::string, Node>& map);
 };
@@ -114,7 +118,7 @@ int calcScoreUpperBoundPart1(const std::map<std::string, Node>& map, int current
 	return currentLowerBound + std::max(scoreForPickingBiggestValveFirst, scoreForPickingCurrentValveFirst);
 }
 
-int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLowerBound, const std::string& currentNodeName, const std::set<std::string>& valvesToOpen, int turns) {
+int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLowerBound, const std::string& currentNodeName, const boost::container::flat_set<std::string>& valvesToOpen, int turns) {
 	// part 2 upper bound
 	// lets just make a simpler calculation, since not allowing agents to move to their previous node without doing something leads to the biggest reduction in the number of nodes.
 
@@ -128,6 +132,57 @@ int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLower
 	}
 
 	std::ranges::sort(valveOpenOrder, std::ranges::greater());
+
+	// If I want to make this faster, I can do the following:
+
+	// if both agents are at valves, and both are best valves
+	// give both +1 move
+
+	// if agent 1 at best valve, agent 2 not at valve, give agent 1 +1 move
+
+	// if agent 2 at best valve, agent 2 not at valve, give agent 2 +1 move
+
+	// if agent 1 at best valve, agent 2 at valve
+	// +1 move agent 1, +1 move agent 2 & make agent 2 valve second
+	// +1 move agent 1, standard agent 2
+
+	// if agent 2 at best valve, agent 1 at valve
+	// +1 move agent 2, +1 move agent 1 & make agent 1 valve second
+	// +1 move agent 2, standard agent 1
+
+	// if agent 1 at 2nd best valve, agent 2 not at valve
+	// +1 move agent 1, 2nd best valve first
+	// standard
+
+	// if agent 2 at 2nd best valve, agent 1 not at valve
+	// +1 move agent 2, 2nd best valve first
+	// standard
+
+	// if agent 1 at 2nd best valve, agent 2 at valve
+	// +1 move agent 1, +1 move agent 2, current valves first
+	// +1 move agent 1, agent 1 valve first, standard agent 2
+	// standard
+
+	// if agent 2 at 2nd best valve, agent 1 at valve
+	// +1 move agent 2, +1 move agent 1, current valves first
+	// +1 move agent 2, agent 2 valve first, standard agent 1
+	// standard
+
+	// both agents at valves
+	// +1 move agent 1, +1 move agent 2, current valves first
+	// +1 move agent 1, agent 1 valve first
+	// +1 move agent 2, agent 2 valve first
+	// standard
+
+	// agent 1 at valve
+	// +1 move agent 1, agent 1 valve first
+	// standard
+
+	// agent 2 at valve
+	// +1 move agent 2, agent 2 valve first
+	// standard
+
+	// otherwise standard
 
 	// lest imagine both agents are at the best nodes to open next,
 	// so we give them turns + 1
@@ -165,7 +220,7 @@ int main(int argc, char* argv[]) {
 	auto inputIntoLines = std::string_view{ input } | std::views::split("\n"sv) | std::views::transform([](auto rng) { return std::string_view(rng.begin(), rng.end()); }) | std::views::filter([](auto str) { return !str.empty(); });
 
 	std::map<std::string, Node> graph;
-	std::set<std::string> valvesToOpen;
+	boost::container::flat_set<std::string> valvesToOpen;
 
 	const std::regex line_regex(R"(^Valve (..) has flow rate=(\d+); tunnels? leads? to valves? (.*)$)");
 
@@ -188,11 +243,11 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	std::vector<SolutionData> wipSolutions;
-	wipSolutions.emplace_back(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, "AA", valvesToOpen, numRounds), "AA", "", "AA", "", {}, valvesToOpen});
+	std::vector<std::unique_ptr<SolutionData>> wipSolutions;
+	wipSolutions.emplace_back(std::make_unique<SolutionData>(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, "AA", valvesToOpen, numRounds), "AA", "", "AA", "", {}, valvesToOpen }));
 
 	for (int i = 0; i < numRounds; i++) {
-		std::vector<SolutionData> newSolutions;
+		std::vector<std::unique_ptr<SolutionData>> newSolutions;
 
 		// for each solution
 		//   create a new solution for each possible option, updating the upper and lower bound scores
@@ -215,7 +270,7 @@ int main(int argc, char* argv[]) {
 
 		//for (const auto& solution : wipSolutions) {
 		for (size_t j = 0; j < wipSolutions.size(); j++) {
-			auto& solution = wipSolutions[j];
+			auto& solution = *wipSolutions[j];
 
 			lowestLowerBound = std::min(lowestLowerBound, solution.scoreLowerBound);
 			highestLowerBound = std::max(highestLowerBound, solution.scoreLowerBound);
@@ -226,7 +281,7 @@ int main(int argc, char* argv[]) {
 			if (solution.valvesStillToOpen.empty()) {
 				auto newSolution = solution;
 				newSolution.minute++;
-				newSolutions.push_back(newSolution);
+				newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
 				continue;
 			}
 
@@ -251,7 +306,7 @@ int main(int argc, char* argv[]) {
 
 					highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
 
-					newSolutions.push_back(newSolution);
+					newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
 				}
 			}
 			// handle agent 1 open, agent 2 move
@@ -284,7 +339,7 @@ int main(int argc, char* argv[]) {
 
 						highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
 
-						newSolutions.push_back(newSolution);
+						newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
 					}
 				}
 			}
@@ -318,7 +373,7 @@ int main(int argc, char* argv[]) {
 
 						highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
 
-						newSolutions.push_back(newSolution);
+						newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
 					}
 				}
 			}
@@ -351,7 +406,7 @@ int main(int argc, char* argv[]) {
 						}
 
 						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-						newSolutions.push_back(newSolution);
+						newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
 					}
 				}
 			}
@@ -368,8 +423,8 @@ int main(int argc, char* argv[]) {
 
 		auto solutionsBeforeRemove = newSolutions.size();
 
-		std::erase_if(newSolutions, [highestLowerBound](auto s) {
-			return s.scoreUpperBound < highestLowerBound;
+		std::erase_if(newSolutions, [highestLowerBound](auto& s) {
+			return s->scoreUpperBound < highestLowerBound;
 		});
 
 		auto solutionsAfterRemove = newSolutions.size();
@@ -380,7 +435,7 @@ int main(int argc, char* argv[]) {
 		wipSolutions = std::move(newSolutions);
 	}
 
-	auto highestScore = std::ranges::max(wipSolutions | std::views::transform([](auto s) { return s.scoreLowerBound; }));
+	auto highestScore = std::ranges::max(wipSolutions | std::views::transform([](auto& s) { return s->scoreLowerBound; }));
 	
 	auto end = std::chrono::high_resolution_clock::now();
 
