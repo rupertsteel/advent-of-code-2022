@@ -127,6 +127,7 @@ int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLower
 	}
 
 	std::vector<int> valveOpenOrder;
+	valveOpenOrder.reserve(valvesToOpen.size());
 	for (auto& valve : valvesToOpen) {
 		valveOpenOrder.push_back(map.at(valve).flow_rate);
 	}
@@ -265,7 +266,9 @@ int main(int argc, char* argv[]) {
 		ProgressBar bar{
 			option::BarWidth{60},
 			option::ForegroundColor{Color::white},
-			option::MaxProgress{wipSolutions.size()}
+			option::MaxProgress{wipSolutions.size()},
+			option::ShowElapsedTime{true},
+			option::ShowRemainingTime{true}
 		};
 
 		//for (const auto& solution : wipSolutions) {
@@ -412,7 +415,7 @@ int main(int argc, char* argv[]) {
 			}
 
 			
-			if (j % 1000 == 0) {
+			if (j % 100000 == 0) {
 				bar.set_progress(j);
 				bar.set_option(option::PostfixText{ std::to_string(j) + "/" + std::to_string(wipSolutions.size()) });
 			}
