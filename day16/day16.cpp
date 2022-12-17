@@ -442,11 +442,14 @@ int main(int argc, char* argv[]) {
 		wipSolutions = std::move(newSolutions);
 	}
 
-	auto highestScore = std::ranges::max(wipSolutions | std::views::transform([](auto& s) { return s->scoreLowerBound; }));
-	
+
 	auto end = std::chrono::high_resolution_clock::now();
 
-	fmt::print("Part 1, highest score {}\n", highestScore);
+	if (!wipSolutions.empty()) {
+		auto highestScore = std::ranges::max(wipSolutions | std::views::transform([](auto& s) { return s->scoreLowerBound; }));
+
+		fmt::print("Part 1, highest score {}\n", highestScore);
+	}
 
 	auto dur = end - start;
 	fmt::print("Took {}\n", dur);
