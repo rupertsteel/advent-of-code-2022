@@ -332,7 +332,7 @@ std::optional<RepeatResult> tryDetectRepeats(const std::unordered_map<StateInfo,
 }
 
 int main(int argc, char* argv[]) {
-	std::ifstream inputFile("inputs/day17-test.txt");
+	std::ifstream inputFile("inputs/day17.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
 
 	auto start = std::chrono::high_resolution_clock::now();
@@ -412,15 +412,25 @@ int main(int argc, char* argv[]) {
 				repeatInfo = tryDetectRepeats(detectedRepeats[state], windIndex);
 
 				if (repeatInfo) {
-					running = false;
-					break;
+
+					auto itsLeft = numRocksCount - currentBlockCount;
+					if (itsLeft % repeatInfo->numBlocks == 0) {
+						auto repeatsLeft = itsLeft / repeatInfo->numBlocks;
+
+						fmt::print("Height {}\n", maxHeight + repeatInfo->height * repeatsLeft);
+
+						running = false;
+						break;
+					}
+
+					
 				}
 			}
 		}
 
 	}
 
-	auto numIterationsLeft = numRocksCount - currentBlockCount;
+	/*auto numIterationsLeft = numRocksCount - currentBlockCount;
 
 	fmt::print("Num iterations left {}\n", numIterationsLeft);
 	fmt::print("Blocks per loop {}\n", repeatInfo->numBlocks);
@@ -476,7 +486,7 @@ int main(int argc, char* argv[]) {
 
 		applyShape(map, startX, startY, shapes[shapeIndex].solid);
 		maxHeight = map.rbegin()->first + 1;
-	}
+	}*/
 
 	auto end = std::chrono::high_resolution_clock::now();
 
