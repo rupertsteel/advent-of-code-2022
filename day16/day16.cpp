@@ -34,25 +34,25 @@ constexpr int numRounds = 26; // part 2
 
 struct Node {
 	int flow_rate;
-	std::vector<std::string> nextNodes;
+	std::vector<int> nextNodes;
 };
 
 struct SolutionData {
 	int minute;
 	int scoreLowerBound;
 	int scoreUpperBound;
-	std::string currentNode;
-	std::string prevNode;
+	int currentNode;
+	int prevNode;
 
-	std::string agent2CurrentNode;
-	std::string agent2PrevNode;
+	int agent2CurrentNode;
+	int agent2PrevNode;
 
 	//std::set<std::string> openValves;
 	//std::set<std::string> valvesStillToOpen;
-	boost::container::flat_set<std::string> openValves;
-	boost::container::flat_set<std::string> valvesStillToOpen;
+	boost::container::flat_set<int> openValves;
+	boost::container::flat_set<int> valvesStillToOpen;
 
-	void updateUpperBound(const std::map<std::string, Node>& map);
+	void updateUpperBound(const std::vector<Node>& map);
 };
 
 // idea: have a set of in progress solutions, each with upper and lower bound of score, if the upper bound of any solution is below the lower bound of another, then discard it.
@@ -118,7 +118,7 @@ int calcScoreUpperBoundPart1(const std::map<std::string, Node>& map, int current
 	return currentLowerBound + std::max(scoreForPickingBiggestValveFirst, scoreForPickingCurrentValveFirst);
 }
 
-int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLowerBound, const std::string& currentNodeName, const boost::container::flat_set<std::string>& valvesToOpen, int turns) {
+int calcScoreUpperBound(const std::vector<Node>& map, int currentLowerBound, int currentNodeName, const boost::container::flat_set<int>& valvesToOpen, int turns) {
 	// part 2 upper bound
 	// lets just make a simpler calculation, since not allowing agents to move to their previous node without doing something leads to the biggest reduction in the number of nodes.
 
@@ -207,7 +207,7 @@ int calcScoreUpperBound(const std::map<std::string, Node>& map, int currentLower
 	return currentLowerBound + score;
 }
 
-void SolutionData::updateUpperBound(const std::map<std::string, Node>& map) {
+void SolutionData::updateUpperBound(const std::vector<Node>& map) {
 	scoreUpperBound = calcScoreUpperBound(map, scoreLowerBound, currentNode, valvesStillToOpen, numRounds - minute);
 
 }
@@ -220,8 +220,10 @@ int main(int argc, char* argv[]) {
 
 	auto inputIntoLines = std::string_view{ input } | std::views::split("\n"sv) | std::views::transform([](auto rng) { return std::string_view(rng.begin(), rng.end()); }) | std::views::filter([](auto str) { return !str.empty(); });
 
-	std::map<std::string, Node> graph;
-	boost::container::flat_set<std::string> valvesToOpen;
+	std::vector<Node> graph;
+	std::map<std::string, int> nameToId;
+	std::map<std::string, std::vector<std::string>> nextNodesMap;
+	boost::container::flat_set<int> valvesToOpen;
 
 	const std::regex line_regex(R"(^Valve (..) has flow rate=(\d+); tunnels? leads? to valves? (.*)$)");
 
@@ -236,16 +238,26 @@ int main(int argc, char* argv[]) {
 		auto nextNodesStr = results[3].str();
 
 		auto nextNodes = nextNodesStr | std::views::split(", "s) | std::views::transform([](auto rng) { return std::string(rng.begin(), rng.end()); }) | std::ranges::to<std::vector>();
+		nextNodesMap.emplace(nodeName, nextNodes);
 
-		graph.emplace(nodeName, Node{ flowRate, nextNodes });
+		nameToId.emplace(nodeName, graph.size());
 
 		if (flowRate != 0) {
-			valvesToOpen.emplace(nodeName);
+			valvesToOpen.emplace(graph.size());
+		}
+		graph.emplace_back(Node{ flowRate, {} });
+	}
+
+	for (auto& elem : nextNodesMap) {
+		auto& src = graph[nameToId[elem.first]];
+
+		for (auto& target : elem.second) {
+			src.nextNodes.push_back(nameToId[target]);
 		}
 	}
 
 	std::vector<std::unique_ptr<SolutionData>> wipSolutions;
-	wipSolutions.emplace_back(std::make_unique<SolutionData>(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, "AA", valvesToOpen, numRounds), "AA", "", "AA", "", {}, valvesToOpen }));
+	wipSolutions.emplace_back(std::make_unique<SolutionData>(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, nameToId.at("AA"), valvesToOpen, numRounds), nameToId.at("AA"), -1, nameToId.at("AA"), -1, {}, valvesToOpen }));
 
 	std::vector<std::jthread> cleanupThreads;
 
@@ -306,8 +318,8 @@ int main(int argc, char* argv[]) {
 
 					newSolution.updateUpperBound(graph);
 					lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-					newSolution.prevNode.erase();
-					newSolution.agent2PrevNode.erase();
+					newSolution.prevNode = -1;
+					newSolution.agent2PrevNode = -1;
 
 					highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
 
@@ -340,7 +352,7 @@ int main(int argc, char* argv[]) {
 						}
 
 						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-						newSolution.prevNode.erase();
+						newSolution.prevNode = -1;
 
 						highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
 
@@ -374,7 +386,7 @@ int main(int argc, char* argv[]) {
 						}
 
 						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-						newSolution.prevNode.erase();
+						newSolution.prevNode = -1;
 
 						highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
 
