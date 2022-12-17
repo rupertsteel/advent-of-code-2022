@@ -118,12 +118,107 @@ int calcScoreUpperBoundPart1(const std::map<std::string, Node>& map, int current
 	return currentLowerBound + std::max(scoreForPickingBiggestValveFirst, scoreForPickingCurrentValveFirst);
 }
 
-int calcScoreUpperBound(const std::vector<Node>& map, int currentLowerBound, int currentNodeName, const boost::container::flat_set<int>& valvesToOpen, int turns) {
+int calcScoreUpperBoundInternal(const std::vector<int>& openOrder, std::optional<int> agent1ReplacementFlowRate, std::optional<int> agent2ReplacementFlowRate, int turns) {
+	int score = 0;
+
+	// 0 is move, 1 is open
+	int agent1CurrentAction = agent1ReplacementFlowRate ? 1 : 0;
+	int agent2CurrentAction = agent2ReplacementFlowRate ? 1 : 0;
+
+	std::optional<int> skipFlowRate1;
+	std::optional<int> skipFlowRate2;
+
+	std::span stillToOpen{openOrder};
+
+	for (int i = 0; i < turns && !stillToOpen.empty(); i++) {
+		if (agent1CurrentAction == 0) {
+			agent1CurrentAction = 1;
+		} else {
+			// if we have a open override, do that first
+			if (agent1ReplacementFlowRate) {
+				// open this valve now
+				score += *agent1ReplacementFlowRate * (turns - i - 1);
+				skipFlowRate1 = agent1ReplacementFlowRate;
+				agent1ReplacementFlowRate.reset();
+
+				agent1CurrentAction = 0;
+			} else {
+				// see if there is anything to open
+				// skipping the items we need to skip
+				while (!stillToOpen.empty()) {
+					auto rate = stillToOpen.front();
+					if (skipFlowRate1.has_value() && skipFlowRate1 == rate) {
+						stillToOpen = stillToOpen.subspan(1);
+						continue;
+					}
+					if (skipFlowRate2.has_value() && skipFlowRate2 == rate) {
+						stillToOpen = stillToOpen.subspan(1);
+						continue;
+					}
+
+					stillToOpen = stillToOpen.subspan(1);
+
+					score += rate * (turns - i - 1);
+					agent1CurrentAction = 0;
+					break;
+				}
+			}
+		}
+		if (agent2CurrentAction == 0) {
+			agent2CurrentAction = 1;
+		} else {
+			// if we have a open override, do that first
+			if (agent2ReplacementFlowRate) {
+				// open this valve now
+				score += *agent2ReplacementFlowRate * (turns - i - 1);
+				skipFlowRate2 = agent2ReplacementFlowRate;
+				agent2ReplacementFlowRate.reset();
+
+				agent2CurrentAction = 0;
+			} else {
+				// see if there is anything to open
+				// skipping the items we need to skip
+				while (!stillToOpen.empty()) {
+					auto rate = stillToOpen.front();
+					if (skipFlowRate1.has_value() && skipFlowRate1 == rate) {
+						stillToOpen = stillToOpen.subspan(1);
+						continue;
+					}
+					if (skipFlowRate2.has_value() && skipFlowRate2 == rate) {
+						stillToOpen = stillToOpen.subspan(1);
+						continue;
+					}
+
+					stillToOpen = stillToOpen.subspan(1);
+
+					score += rate * (turns - i - 1);
+					agent2CurrentAction = 0;
+					break;
+				}
+			}
+		}
+	}
+
+	return score;
+}
+
+int calcScoreUpperBound(const std::vector<Node>& map, int currentLowerBound, int agent1CurrentNode, int agent2CurrentNode, const boost::container::flat_set<int>& valvesToOpen, int turns) {
 	// part 2 upper bound
 	// lets just make a simpler calculation, since not allowing agents to move to their previous node without doing something leads to the biggest reduction in the number of nodes.
 
 	if (valvesToOpen.empty()) {
 		return currentLowerBound;
+	}
+
+	// and handle only 1 valve left
+	if (valvesToOpen.size() == 1) {
+		if (valvesToOpen.contains(agent1CurrentNode) || valvesToOpen.contains(agent2CurrentNode)) {
+			// open it now
+			return currentLowerBound + map.at(*valvesToOpen.begin()).flow_rate * (turns - 1);
+		}
+
+		// open it next turn
+		return currentLowerBound + map.at(*valvesToOpen.begin()).flow_rate * (turns - 2);
 	}
 
 	std::vector<int> valveOpenOrder;
@@ -134,61 +229,38 @@ int calcScoreUpperBound(const std::vector<Node>& map, int currentLowerBound, int
 
 	std::ranges::sort(valveOpenOrder, std::ranges::greater());
 
-	// If I want to make this faster, I can do the following:
+	// Each agent can do the following
+	// C1: Move          -> Open(best) -> Move       -> ...
+	// C1: Open(current) -> Move       -> Open(best) -> ... // if at a valve
 
-	// if both agents are at valves, and both are best valves
-	// give both +1 move
+	// We need to combine this for two agents
 
-	// if agent 1 at best valve, agent 2 not at valve, give agent 1 +1 move
+	// handle (C1, C1)
+	auto bestScore = calcScoreUpperBoundInternal(valveOpenOrder, std::nullopt, std::nullopt, turns);
 
-	// if agent 2 at best valve, agent 2 not at valve, give agent 2 +1 move
+	
+	// handle (C2, C1)
+	if (map.at(agent1CurrentNode).flow_rate != 0) {
+		bestScore = std::max(bestScore, calcScoreUpperBoundInternal(valveOpenOrder, map.at(agent1CurrentNode).flow_rate, std::nullopt, turns));
+	}
 
-	// if agent 1 at best valve, agent 2 at valve
-	// +1 move agent 1, +1 move agent 2 & make agent 2 valve second
-	// +1 move agent 1, standard agent 2
+	// handle (C1, C2)
+	if (map.at(agent2CurrentNode).flow_rate != 0 && agent1CurrentNode != agent2CurrentNode) {
+		bestScore = std::max(bestScore, calcScoreUpperBoundInternal(valveOpenOrder, std::nullopt, map.at(agent2CurrentNode).flow_rate, turns));
+	}
 
-	// if agent 2 at best valve, agent 1 at valve
-	// +1 move agent 2, +1 move agent 1 & make agent 1 valve second
-	// +1 move agent 2, standard agent 1
+	// handle (C2, C2)
+	if (map.at(agent1CurrentNode).flow_rate != 0 && map.at(agent2CurrentNode).flow_rate != 0 && agent1CurrentNode != agent2CurrentNode) {
+		bestScore = std::max(bestScore, calcScoreUpperBoundInternal(valveOpenOrder, map.at(agent1CurrentNode).flow_rate, map.at(agent2CurrentNode).flow_rate, turns));
+	}
 
-	// if agent 1 at 2nd best valve, agent 2 not at valve
-	// +1 move agent 1, 2nd best valve first
-	// standard
+	return currentLowerBound + bestScore;
 
-	// if agent 2 at 2nd best valve, agent 1 not at valve
-	// +1 move agent 2, 2nd best valve first
-	// standard
-
-	// if agent 1 at 2nd best valve, agent 2 at valve
-	// +1 move agent 1, +1 move agent 2, current valves first
-	// +1 move agent 1, agent 1 valve first, standard agent 2
-	// standard
-
-	// if agent 2 at 2nd best valve, agent 1 at valve
-	// +1 move agent 2, +1 move agent 1, current valves first
-	// +1 move agent 2, agent 2 valve first, standard agent 1
-	// standard
-
-	// both agents at valves
-	// +1 move agent 1, +1 move agent 2, current valves first
-	// +1 move agent 1, agent 1 valve first
-	// +1 move agent 2, agent 2 valve first
-	// standard
-
-	// agent 1 at valve
-	// +1 move agent 1, agent 1 valve first
-	// standard
-
-	// agent 2 at valve
-	// +1 move agent 2, agent 2 valve first
-	// standard
-
-	// otherwise standard
 
 	// lest imagine both agents are at the best nodes to open next,
 	// so we give them turns + 1
 
-	int score = 0;
+	/*int score = 0;
 
 	int calcRounds = turns + 1;
 
@@ -204,11 +276,11 @@ int calcScoreUpperBound(const std::vector<Node>& map, int currentLowerBound, int
 		calcRounds -= 2;
 	}
 
-	return currentLowerBound + score;
+	return currentLowerBound + score;*/
 }
 
 void SolutionData::updateUpperBound(const std::vector<Node>& map) {
-	scoreUpperBound = calcScoreUpperBound(map, scoreLowerBound, currentNode, valvesStillToOpen, numRounds - minute);
+	scoreUpperBound = calcScoreUpperBound(map, scoreLowerBound, currentNode, agent2CurrentNode, valvesStillToOpen, numRounds - minute);
 
 }
 
@@ -280,7 +352,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	std::vector<std::unique_ptr<SolutionData>> wipSolutions;
-	wipSolutions.emplace_back(std::make_unique<SolutionData>(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, nameToId.at("AA"), valvesToOpen, numRounds), nameToId.at("AA"), -1, nameToId.at("AA"), -1, {}, valvesToOpen }));
+	wipSolutions.emplace_back(std::make_unique<SolutionData>(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, nameToId.at("AA"), nameToId.at("AA"), valvesToOpen, numRounds), nameToId.at("AA"), -1, nameToId.at("AA"), -1, {}, valvesToOpen}));
 
 	std::vector<std::jthread> cleanupThreads;
 
@@ -415,7 +487,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	auto dur = end - start;
+
+	auto durSecs = std::chrono::duration_cast<std::chrono::duration<float>>(dur);
+
 	fmt::print("Took {}\n", dur);
+	fmt::print("Or {}\n", durSecs);
 
 	return 0;
 }
