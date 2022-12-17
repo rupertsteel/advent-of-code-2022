@@ -282,9 +282,13 @@ uint64_t getTopBitset(const std::map<ptrdiff_t, std::array<bool, 7>>& map) {
 	return bits;
 }
 
+struct RepeatResult {
+	ptrdiff_t height;
+	ptrdiff_t numBlocks;
+	int windMod;
+};
 
-
-std::optional<RepeatInfo> tryDetectRepeats(const std::unordered_map<StateInfo, std::vector<RepeatInfo>>::mapped_type& mapped) {
+std::optional<RepeatResult> tryDetectRepeats(const std::unordered_map<StateInfo, std::vector<RepeatInfo>>::mapped_type& mapped, int windMod) {
 	fmt::print("Detecting repeats\n");
 
 	fmt::print("Input data:\n");
@@ -321,14 +325,14 @@ std::optional<RepeatInfo> tryDetectRepeats(const std::unordered_map<StateInfo, s
 	});
 
 	if (allHeightsDiffsTheSame && allBlocksDiffsTheSame) {
-		return RepeatInfo{ heightDifferences.front(), blockDifferences.front() };
+		return RepeatResult{ heightDifferences.front(), blockDifferences.front(), windMod };
 	}
 
 	return std::nullopt;
 }
 
 int main(int argc, char* argv[]) {
-	std::ifstream inputFile("inputs/day17.txt");
+	std::ifstream inputFile("inputs/day17-test.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
 
 	auto start = std::chrono::high_resolution_clock::now();
@@ -343,7 +347,7 @@ int main(int argc, char* argv[]) {
 
 	//constexpr ptrdiff_t numRocksCount = 2022;
 	//constexpr int numRocksCount = 10;
-	constexpr ptrdiff_t numRocksCount = 1514285714288;
+	constexpr ptrdiff_t numRocksCount = 1000000000000;
 	ptrdiff_t maxHeight = 0;
 
 	std::unordered_map<StateInfo, std::vector<RepeatInfo>> detectedRepeats;
@@ -353,7 +357,7 @@ int main(int argc, char* argv[]) {
 
 	bool running = true;
 
-	std::optional<RepeatInfo> repeatInfo;
+	std::optional<RepeatResult> repeatInfo;
 
 	while(running) {
 		ptrdiff_t startX = maxHeight + 3;
@@ -391,6 +395,8 @@ int main(int argc, char* argv[]) {
 
 		currentBlockCount++;
 
+		
+
 		if (maxHeight > 9) {
 			auto topBitset = getTopBitset(map);
 
@@ -403,7 +409,7 @@ int main(int argc, char* argv[]) {
 			detectedRepeats[state].push_back(RepeatInfo{ maxHeight, currentBlockCount });
 
 			if (detectedRepeats[state].size() >= 10) {
-				repeatInfo = tryDetectRepeats(detectedRepeats[state]);
+				repeatInfo = tryDetectRepeats(detectedRepeats[state], windIndex);
 
 				if (repeatInfo) {
 					running = false;
@@ -411,9 +417,66 @@ int main(int argc, char* argv[]) {
 				}
 			}
 		}
+
 	}
 
+	auto numIterationsLeft = numRocksCount - currentBlockCount;
 
+	fmt::print("Num iterations left {}\n", numIterationsLeft);
+	fmt::print("Blocks per loop {}\n", repeatInfo->numBlocks);
+
+	auto numRepeats = numIterationsLeft / repeatInfo->numBlocks;
+	fmt::print("Need to jump forward {} times\n", numRepeats);
+
+	auto preJumpMaxHeight = maxHeight;
+
+	maxHeight += numRepeats * repeatInfo->height - 1;
+
+	// then copy the map structure
+	for (ptrdiff_t i = 0; i < 20; i++) {
+		map[maxHeight - 1 - i] = map[preJumpMaxHeight - 1 - i];
+	}
+
+	currentBlockCount += numRepeats * repeatInfo->numBlocks;
+
+	// and run until we reach the target
+
+	windCount = repeatInfo->windMod;
+
+	for (; currentBlockCount < numRocksCount; currentBlockCount++) {
+		ptrdiff_t startX = maxHeight + 3;
+		ptrdiff_t startY = 2;
+
+		int shapeIndex = currentBlockCount % 5;
+
+		int windIndex;
+
+		while (true) {
+			windIndex = windCount % windInputRange.size();
+			auto windDir = windInputRange[windIndex];
+			++windCount;
+
+			if (windDir == '<') {
+				// test left
+				if (startY > 0 && canMove(map, startX, startY, shapes[shapeIndex].needFreeMoveLeft)) {
+					startY -= 1;
+				}
+			} else {
+				if (startY + shapes[shapeIndex].width < 7 && canMove(map, startX, startY, shapes[shapeIndex].needFreeMoveRight)) {
+					startY += 1;
+				}
+			}
+
+			if (canMove(map, startX, startY, shapes[shapeIndex].needFreeMoveDown)) {
+				startX--;
+			} else {
+				break;
+			}
+		}
+
+		applyShape(map, startX, startY, shapes[shapeIndex].solid);
+		maxHeight = map.rbegin()->first + 1;
+	}
 
 	auto end = std::chrono::high_resolution_clock::now();
 
