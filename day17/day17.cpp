@@ -186,7 +186,7 @@ std::array<Shape, 5> shapes {
 	}
 };
 
-bool canMove(const std::map<int, std::array<bool, 7>>& map, int startX, int startY, const std::vector<Point>& testPoints) {
+bool canMove(const std::map<ptrdiff_t, std::array<bool, 7>>& map, ptrdiff_t startX, ptrdiff_t startY, const std::vector<Point>& testPoints) {
 	return std::ranges::all_of(testPoints, [&](auto testPoint) {
 		auto actualX = startX + testPoint.x;
 		auto actualY = startY + testPoint.y;
@@ -211,7 +211,7 @@ bool canMove(const std::map<int, std::array<bool, 7>>& map, int startX, int star
 	});
 }
 
-void applyShape(std::map<int, std::array<bool, 7>>& map, int startX, int startY, const std::vector<Point>& solid) {
+void applyShape(std::map<ptrdiff_t, std::array<bool, 7>>& map, ptrdiff_t startX, ptrdiff_t startY, const std::vector<Point>& solid) {
 	for (auto point : solid) {
 		auto actualX = startX + point.x;
 		auto actualY = startY + point.y;
@@ -221,7 +221,7 @@ void applyShape(std::map<int, std::array<bool, 7>>& map, int startX, int startY,
 }
 
 
-void printMap(const std::map<int, std::array<bool, 7>>& map) {
+void printMap(const std::map<ptrdiff_t, std::array<bool, 7>>& map) {
 
 	for (auto line : map | std::views::reverse) {
 		fmt::print("{:4} |{}{}{}{}{}{}{}|\n",
@@ -239,6 +239,94 @@ void printMap(const std::map<int, std::array<bool, 7>>& map) {
 	fmt::print("     +-------+\n\n");
 }
 
+struct StateInfo {
+	int blockIndex;
+	int windIndex;
+	uint64_t topBlocks;
+
+	std::strong_ordering operator<=>(const StateInfo&) const = default;
+	bool operator==(const StateInfo&) const = default;
+};
+
+template<>
+struct std::hash<StateInfo> {
+	std::size_t operator()(const StateInfo& s) const noexcept {
+		auto h1 = std::hash<int>{}(s.blockIndex);
+		auto h2 = std::hash<int>{}(s.windIndex);
+		auto h3 = std::hash<uint64_t>{}(s.topBlocks);
+
+		return h1 ^ (h2 << 1) ^ (h3 << 2);
+	}
+};
+
+struct RepeatInfo {
+	ptrdiff_t height;
+	ptrdiff_t numBlocks;
+};
+
+uint64_t getTopBitset(const std::map<ptrdiff_t, std::array<bool, 7>>& map) {
+	uint64_t bits = 0;
+
+	auto it = map.rbegin();
+
+	for (int i = 0; i < 9; i++) {
+		auto layerBits = it->second;
+
+		for (int j = 0; j < 7; j++) {
+			bits |= (it->second[j] ? 1 : 0) >> (i * 7 + j);
+		}
+
+		++it;
+	}
+
+	return bits;
+}
+
+
+
+std::optional<RepeatInfo> tryDetectRepeats(const std::unordered_map<StateInfo, std::vector<RepeatInfo>>::mapped_type& mapped) {
+	fmt::print("Detecting repeats\n");
+
+	fmt::print("Input data:\n");
+	fmt::print("Height blocks\n");
+	for (auto& in : mapped | std::views::reverse | std::views::take(10) | std::views::reverse) {
+		fmt::print("{:6} {:6}\n", in.height, in.numBlocks);
+	}
+
+	fmt::print("Diffs\n");
+	fmt::print("Height blocks\n");
+
+	std::vector<ptrdiff_t> heightDifferences;
+	std::vector<ptrdiff_t> blockDifferences;
+
+	//for (int i = 1; i < mapped.size(); i++) {
+	for (auto pair : mapped | std::views::reverse | std::views::take(10) | std::views::reverse | std::views::slide(2)) {
+
+
+		auto diffHeight = pair[1].height - pair[0].height;
+		auto diffBlocks = pair[1].numBlocks - pair[0].numBlocks;
+
+		heightDifferences.push_back(diffHeight);
+		blockDifferences.push_back(diffBlocks);
+
+		fmt::print("{:6} {:6}\n", diffHeight, diffBlocks);
+	}
+
+	auto allHeightsDiffsTheSame = std::ranges::all_of(heightDifferences, [&](auto elem) {
+		return elem == heightDifferences.front();
+	});
+
+	auto allBlocksDiffsTheSame = std::ranges::all_of(blockDifferences, [&](auto elem) {
+		return elem == blockDifferences.front();
+	});
+
+	if (allHeightsDiffsTheSame && allBlocksDiffsTheSame) {
+		return RepeatInfo{ heightDifferences.front(), blockDifferences.front() };
+	}
+
+	return std::nullopt;
+}
+
 int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day17.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
@@ -248,29 +336,38 @@ int main(int argc, char* argv[]) {
 	std::string_view inputSv{ input };
 
 	auto newline = inputSv.find('\n');
-	auto inputRange = inputSv.substr(0, newline);
+	auto windInputRange = inputSv.substr(0, newline);
 
-	auto jankRepeatView = std::views::iota(0) | std::views::transform([&inputRange](auto i) {
-		return inputRange[i % inputRange.size()];
-	});
 
-	std::map<int, std::array<bool, 7>> map;
+	std::map<ptrdiff_t, std::array<bool, 7>> map;
 
-	constexpr int numRocksCount = 2022;
+	//constexpr ptrdiff_t numRocksCount = 2022;
 	//constexpr int numRocksCount = 10;
-	int maxHeight = 0;
+	constexpr ptrdiff_t numRocksCount = 1514285714288;
+	ptrdiff_t maxHeight = 0;
 
-	auto windIt = jankRepeatView.begin();
+	std::unordered_map<StateInfo, std::vector<RepeatInfo>> detectedRepeats;
 
-	for (int i = 0; i < numRocksCount; i++) {
-		int startX = maxHeight + 3;
-		int startY = 2;
+	ptrdiff_t windCount = 0;
+	ptrdiff_t currentBlockCount = 0;
 
-		auto shapeIndex = i % 5;
+	bool running = true;
+
+	std::optional<RepeatInfo> repeatInfo;
+
+	while(running) {
+		ptrdiff_t startX = maxHeight + 3;
+		ptrdiff_t startY = 2;
+
+		int shapeIndex = currentBlockCount % 5;
+
+		int windIndex;
 
 		while (true) {
-			auto windDir = *windIt;
-			++windIt;
+			windIndex = windCount % windInputRange.size();
+			auto windDir = windInputRange[windIndex];
+			++windCount;
+
 			if (windDir == '<') {
 				// test left
 				if (startY > 0 && canMove(map, startX, startY, shapes[shapeIndex].needFreeMoveLeft)) {
@@ -290,16 +387,37 @@ int main(int argc, char* argv[]) {
 		}
 
 		applyShape(map, startX, startY, shapes[shapeIndex].solid);
-		maxHeight = map.size();
+		maxHeight = map.rbegin()->first + 1;
 
-		//printMap(map);
+		currentBlockCount++;
 
-		// add rock to map
+		if (maxHeight > 9) {
+			auto topBitset = getTopBitset(map);
+
+			StateInfo state{
+				shapeIndex,
+				windIndex,
+				topBitset
+			};
+
+			detectedRepeats[state].push_back(RepeatInfo{ maxHeight, currentBlockCount });
+
+			if (detectedRepeats[state].size() >= 10) {
+				repeatInfo = tryDetectRepeats(detectedRepeats[state]);
+
+				if (repeatInfo) {
+					running = false;
+					break;
+				}
+			}
+		}
 	}
+
+
 
 	auto end = std::chrono::high_resolution_clock::now();
 
-	printMap(map);
+	//printMap(map);
 
 	fmt::print("Part 1: max height {}\n", maxHeight);
 
