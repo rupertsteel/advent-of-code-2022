@@ -212,6 +212,29 @@ void SolutionData::updateUpperBound(const std::vector<Node>& map) {
 
 }
 
+struct Move {
+	bool openValve;
+	int move;
+};
+
+std::vector<Move> getMoves(const std::vector<Node>& nodes, int currentNode, int prevNode, const boost::container::flat_set<int>& toOpen) {
+	std::vector<Move> returnVec;
+
+	if (toOpen.contains(currentNode)) {
+		returnVec.emplace_back(true, -1);
+	}
+
+	for (auto next : nodes[currentNode].nextNodes) {
+		if (next == prevNode && toOpen.size() > 1) {
+			continue;
+		}
+
+		returnVec.emplace_back(false, next);
+	}
+
+	return returnVec;
+}
+
 int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day16.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
@@ -302,133 +325,61 @@ int main(int argc, char* argv[]) {
 				continue;
 			}
 
-			// handle both agents open
-			{
-				if (solution.valvesStillToOpen.contains(solution.currentNode) && solution.valvesStillToOpen.contains(solution.agent2CurrentNode) && solution.currentNode != solution.agent2CurrentNode) {
-					// open both valves
-					auto newSolution = solution;
-					newSolution.openValves.emplace(solution.currentNode);
-					newSolution.valvesStillToOpen.erase(solution.currentNode);
-					newSolution.openValves.emplace(solution.agent2CurrentNode);
-					newSolution.valvesStillToOpen.erase(solution.agent2CurrentNode);
+			auto meMoves = getMoves(graph, solution.currentNode, solution.prevNode, solution.valvesStillToOpen);
+			auto elephantMoves = getMoves(graph, solution.agent2CurrentNode, solution.agent2PrevNode, solution.valvesStillToOpen);
 
+			for (auto& myMove : meMoves) {
+				for (auto& elephantMove : elephantMoves) {
+					if (myMove.openValve && elephantMove.openValve && solution.currentNode == solution.agent2CurrentNode) {
+						continue; // we can't both open valves
+					}
+					if (solution.currentNode == solution.agent2CurrentNode && elephantMove.openValve) {
+						continue; // prefer me to open valves when we both can
+					}
+					if (solution.currentNode == solution.agent2CurrentNode && !myMove.openValve) {
+						// perfer me moving to the lowest numbered next valve (we can both travel in the same direction though)
+						if (myMove.move > elephantMove.move) {
+							continue;
+						}
+					}
+
+					auto newSolution = solution;
 					newSolution.minute++;
-					newSolution.scoreLowerBound += graph.at(solution.currentNode).flow_rate * (numRounds - newSolution.minute);
-					newSolution.scoreLowerBound += graph.at(solution.agent2CurrentNode).flow_rate * (numRounds - newSolution.minute);
+
+					if (myMove.openValve) {
+						newSolution.openValves.emplace(solution.currentNode);
+						newSolution.valvesStillToOpen.erase(solution.currentNode);
+						newSolution.scoreLowerBound += graph.at(solution.currentNode).flow_rate * (numRounds - newSolution.minute);
+						newSolution.prevNode = -1;
+					} else {
+						newSolution.currentNode = myMove.move;
+						newSolution.prevNode = solution.currentNode;
+					}
+
+					if (elephantMove.openValve) {
+						newSolution.openValves.emplace(solution.agent2CurrentNode);
+						newSolution.valvesStillToOpen.erase(solution.agent2CurrentNode);
+						newSolution.scoreLowerBound += graph.at(solution.agent2CurrentNode).flow_rate * (numRounds - newSolution.minute);
+						newSolution.agent2PrevNode = -1;
+					} else {
+						newSolution.agent2CurrentNode = elephantMove.move;
+						newSolution.agent2PrevNode = solution.agent2CurrentNode;
+					}
 
 					newSolution.updateUpperBound(graph);
 					lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-					newSolution.prevNode = -1;
-					newSolution.agent2PrevNode = -1;
 
 					highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
+
+					if (newSolution.scoreUpperBound < highestLowerBound) {
+						solutionsRemovedBeforeAdd++;
+						continue;
+					}
 
 					newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
 				}
 			}
-			// handle agent 1 open, agent 2 move
-			{
-				if (solution.valvesStillToOpen.contains(solution.currentNode)) {
-					for (auto nextNode : graph.at(solution.agent2CurrentNode).nextNodes) {
-						// if there is only 1 valve to open, allow agents to travel anywhere to prevent them from getting stuck
-						if (nextNode == solution.agent2PrevNode && solution.valvesStillToOpen.size() > 1) {
-							continue;
-						}
 
-						auto newSolution = solution;
-						newSolution.openValves.emplace(solution.currentNode);
-						newSolution.valvesStillToOpen.erase(solution.currentNode);
-
-						newSolution.agent2CurrentNode = nextNode;
-						newSolution.agent2PrevNode = solution.agent2CurrentNode;
-
-						newSolution.minute++;
-						newSolution.scoreLowerBound += graph.at(solution.currentNode).flow_rate * (numRounds - newSolution.minute);
-						newSolution.updateUpperBound(graph);
-
-						if (newSolution.scoreUpperBound < highestLowerBound) {
-							solutionsRemovedBeforeAdd++;
-							continue;
-						}
-
-						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-						newSolution.prevNode = -1;
-
-						highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
-
-						newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
-					}
-				}
-			}
-
-			// handle agent 1 move, agent 2 open
-			{
-				if (solution.valvesStillToOpen.contains(solution.agent2CurrentNode)) {
-					for (auto nextNode : graph.at(solution.currentNode).nextNodes) {
-						if (nextNode == solution.prevNode && solution.valvesStillToOpen.size() > 1) {
-							continue;
-						}
-
-						auto newSolution = solution;
-						newSolution.openValves.emplace(solution.agent2CurrentNode);
-						newSolution.valvesStillToOpen.erase(solution.agent2CurrentNode);
-
-						newSolution.minute++;
-						newSolution.scoreLowerBound += graph.at(solution.agent2CurrentNode).flow_rate * (numRounds - newSolution.minute);
-						newSolution.updateUpperBound(graph);
-
-						newSolution.currentNode = nextNode;
-						newSolution.prevNode = solution.currentNode;
-
-						if (newSolution.scoreUpperBound < highestLowerBound) {
-							solutionsRemovedBeforeAdd++;
-							continue;
-						}
-
-						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-						newSolution.prevNode = -1;
-
-						highestLowerBound = std::max(highestLowerBound, newSolution.scoreLowerBound);
-
-						newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
-					}
-				}
-			}
-
-			// handle both agents move
-			{
-				for (auto agent1NextNode : graph.at(solution.currentNode).nextNodes) {
-					if (agent1NextNode == solution.prevNode && solution.valvesStillToOpen.size() > 1) {
-						continue;
-					}
-
-					for (auto agent2NextNode : graph.at(solution.agent2CurrentNode).nextNodes) {
-						if (agent2NextNode == solution.agent2PrevNode && solution.valvesStillToOpen.size() > 1) {
-							continue;
-						}
-
-						auto newSolution = solution;
-
-						newSolution.minute++;
-						newSolution.currentNode = agent1NextNode;
-						newSolution.prevNode = solution.currentNode;
-						newSolution.agent2CurrentNode = agent2NextNode;
-						newSolution.agent2PrevNode = solution.agent2CurrentNode;
-
-						newSolution.updateUpperBound(graph);
-
-						if (newSolution.scoreUpperBound < highestLowerBound) {
-							solutionsRemovedBeforeAdd++;
-							continue;
-						}
-
-						lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
-						newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
-					}
-				}
-			}
-
-			
 			if (j % 100000 == 0) {
 				bar.set_progress(j);
 				bar.set_option(option::PostfixText{ std::to_string(j) + "/" + std::to_string(wipSolutions.size()) });
