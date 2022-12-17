@@ -14,7 +14,7 @@
 #include <deque>
 #include <functional>
 #include <variant>
-
+#include <thread>
 
 #include <fmt/ranges.h>
 #include <fmt/chrono.h>
@@ -247,6 +247,8 @@ int main(int argc, char* argv[]) {
 	std::vector<std::unique_ptr<SolutionData>> wipSolutions;
 	wipSolutions.emplace_back(std::make_unique<SolutionData>(SolutionData{ 0, 0, calcScoreUpperBound(graph, 0, "AA", valvesToOpen, numRounds), "AA", "", "AA", "", {}, valvesToOpen }));
 
+	std::vector<std::jthread> cleanupThreads;
+
 	for (int i = 0; i < numRounds; i++) {
 		std::vector<std::unique_ptr<SolutionData>> newSolutions;
 
@@ -434,6 +436,8 @@ int main(int argc, char* argv[]) {
 
 		fmt::print("Round {:2} LL: {:5} HL: {:5} LH: {:5} HH: {:5} #Sol: {:7} #Rem: {:7}\n", i, lowestLowerBound, highestLowerBound, lowestUpperBound, highestUpperBound, newSolutions.size(),
 			solutionsBeforeRemove - solutionsAfterRemove + solutionsRemovedBeforeAdd);
+
+		cleanupThreads.emplace_back([](auto vec) {}, std::move(wipSolutions));
 
 		wipSolutions = std::move(newSolutions);
 	}
