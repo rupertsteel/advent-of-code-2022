@@ -26,6 +26,8 @@
 
 #include <boost/container/flat_set.hpp>
 
+#include "core.hpp"
+
 using namespace std::string_view_literals;
 using namespace std::string_literals;
 
@@ -47,10 +49,8 @@ struct SolutionData {
 	int agent2CurrentNode;
 	int agent2PrevNode;
 
-	//std::set<std::string> openValves;
-	//std::set<std::string> valvesStillToOpen;
-	boost::container::flat_set<int> openValves;
-	boost::container::flat_set<int> valvesStillToOpen;
+	std::uint64_t openValves;
+	std::uint64_t valvesStillToOpen;
 
 	void updateUpperBound(const std::vector<Node>& map);
 };
@@ -202,28 +202,33 @@ int calcScoreUpperBoundInternal(const std::vector<int>& openOrder, std::optional
 	return score;
 }
 
-int calcScoreUpperBound(const std::vector<Node>& map, int currentLowerBound, int agent1CurrentNode, int agent2CurrentNode, const boost::container::flat_set<int>& valvesToOpen, int turns) {
+bool hasBitSet(uint64_t bitset, int bitNum) {
+	return !!(bitset & (1ull << bitNum));
+}
+
+int calcScoreUpperBound(const std::vector<Node>& map, int currentLowerBound, int agent1CurrentNode, int agent2CurrentNode, std::uint64_t valvesToOpen, int turns) {
 	// part 2 upper bound
 	// lets just make a simpler calculation, since not allowing agents to move to their previous node without doing something leads to the biggest reduction in the number of nodes.
 
-	if (valvesToOpen.empty()) {
+	if (valvesToOpen == 0) {
 		return currentLowerBound;
 	}
 
 	// and handle only 1 valve left
-	if (valvesToOpen.size() == 1) {
-		if (valvesToOpen.contains(agent1CurrentNode) || valvesToOpen.contains(agent2CurrentNode)) {
+	if (std::popcount(valvesToOpen) == 1) {
+		if (hasBitSet(valvesToOpen, agent1CurrentNode) || hasBitSet(valvesToOpen, agent2CurrentNode)) {
 			// open it now
-			return currentLowerBound + map.at(*valvesToOpen.begin()).flow_rate * (turns - 1);
+			return currentLowerBound + map.at(std::countr_zero(valvesToOpen)).flow_rate * (turns - 1);
 		}
 
 		// open it next turn
-		return currentLowerBound + map.at(*valvesToOpen.begin()).flow_rate * (turns - 2);
+		return currentLowerBound + map.at(std::countr_zero(valvesToOpen)).flow_rate * (turns - 2);
 	}
 
-	std::vector<int> valveOpenOrder;
-	valveOpenOrder.reserve(valvesToOpen.size());
-	for (auto& valve : valvesToOpen) {
+	static std::vector<int> valveOpenOrder;
+	valveOpenOrder.clear();
+	core::TrueBitRange bitRange{ valvesToOpen };
+	for (auto valve : bitRange) {
 		valveOpenOrder.push_back(map.at(valve).flow_rate);
 	}
 
@@ -289,15 +294,15 @@ struct Move {
 	int move;
 };
 
-std::vector<Move> getMoves(const std::vector<Node>& nodes, int currentNode, int prevNode, const boost::container::flat_set<int>& toOpen) {
+std::vector<Move> getMoves(const std::vector<Node>& nodes, int currentNode, int prevNode, std::uint64_t toOpen) {
 	std::vector<Move> returnVec;
 
-	if (toOpen.contains(currentNode)) {
+	if (toOpen & 1ull << currentNode) {
 		returnVec.emplace_back(true, -1);
 	}
 
 	for (auto next : nodes[currentNode].nextNodes) {
-		if (next == prevNode && toOpen.size() > 1) {
+		if (next == prevNode && std::popcount(toOpen) > 1) {
 			continue;
 		}
 
@@ -318,7 +323,7 @@ int main(int argc, char* argv[]) {
 	std::vector<Node> graph;
 	std::map<std::string, int> nameToId;
 	std::map<std::string, std::vector<std::string>> nextNodesMap;
-	boost::container::flat_set<int> valvesToOpen;
+	std::uint64_t valvesToOpen = 0;
 
 	const std::regex line_regex(R"(^Valve (..) has flow rate=(\d+); tunnels? leads? to valves? (.*)$)");
 
@@ -338,7 +343,7 @@ int main(int argc, char* argv[]) {
 		nameToId.emplace(nodeName, graph.size());
 
 		if (flowRate != 0) {
-			valvesToOpen.emplace(graph.size());
+			valvesToOpen |= (1ull << graph.size());
 		}
 		graph.emplace_back(Node{ flowRate, {} });
 	}
@@ -390,7 +395,7 @@ int main(int argc, char* argv[]) {
 			lowestUpperBound = std::min(lowestUpperBound, solution.scoreUpperBound);
 			
 			// handle the case where we have finished
-			if (solution.valvesStillToOpen.empty()) {
+			if (solution.valvesStillToOpen == 0) {
 				auto newSolution = solution;
 				newSolution.minute++;
 				newSolutions.push_back(std::make_unique<SolutionData>(newSolution));
@@ -419,8 +424,8 @@ int main(int argc, char* argv[]) {
 					newSolution.minute++;
 
 					if (myMove.openValve) {
-						newSolution.openValves.emplace(solution.currentNode);
-						newSolution.valvesStillToOpen.erase(solution.currentNode);
+						newSolution.openValves |= (1ull << solution.currentNode);
+						newSolution.valvesStillToOpen ^= 1ull << solution.currentNode;
 						newSolution.scoreLowerBound += graph.at(solution.currentNode).flow_rate * (numRounds - newSolution.minute);
 						newSolution.prevNode = -1;
 					} else {
@@ -429,8 +434,8 @@ int main(int argc, char* argv[]) {
 					}
 
 					if (elephantMove.openValve) {
-						newSolution.openValves.emplace(solution.agent2CurrentNode);
-						newSolution.valvesStillToOpen.erase(solution.agent2CurrentNode);
+						newSolution.openValves |= (1ull << solution.agent2CurrentNode);
+						newSolution.valvesStillToOpen ^= 1ull << solution.agent2CurrentNode;
 						newSolution.scoreLowerBound += graph.at(solution.agent2CurrentNode).flow_rate * (numRounds - newSolution.minute);
 						newSolution.agent2PrevNode = -1;
 					} else {

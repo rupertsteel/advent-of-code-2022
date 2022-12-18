@@ -21,6 +21,7 @@ add_compile_options("$<$<CXX_COMPILER_ID:GNU>:-Wlogical-op;-Wnull-dereference;-W
 
 add_library(common STATIC
     src/core.cpp
+    src/core.hpp
 )
 
 add_executable(tests
