@@ -374,16 +374,6 @@ int main(int argc, char* argv[]) {
 
 		size_t solutionsRemovedBeforeAdd = 0;
 
-		using namespace indicators;
-		ProgressBar bar{
-			option::BarWidth{60},
-			option::ForegroundColor{Color::white},
-			option::MaxProgress{wipSolutions.size()},
-			option::ShowElapsedTime{true},
-			option::ShowRemainingTime{true}
-		};
-
-		//for (const auto& solution : wipSolutions) {
 		for (size_t j = 0; j < wipSolutions.size(); j++) {
 			auto& solution = *wipSolutions[j];
 
@@ -460,15 +450,7 @@ int main(int argc, char* argv[]) {
 				}
 			}
 
-			if ((j & 0x1FFFF) == 0) {
-				bar.set_progress(j);
-				bar.set_option(option::PostfixText{ std::to_string(j) + "/" + std::to_string(wipSolutions.size()) });
-			}
 		}
-
-		bar.set_option(option::PostfixText{ std::to_string(wipSolutions.size()) + "/" + std::to_string(wipSolutions.size()) });
-		bar.set_progress(wipSolutions.size());
-		
 
 		auto solutionsBeforeRemove = newSolutions.size();
 
