@@ -457,14 +457,15 @@ int main(int argc, char* argv[]) {
 				}
 			}
 
-			if (j % 100000 == 0) {
+			if ((j & 0x1FFFF) == 0) {
 				bar.set_progress(j);
 				bar.set_option(option::PostfixText{ std::to_string(j) + "/" + std::to_string(wipSolutions.size()) });
 			}
 		}
 
 		bar.set_option(option::PostfixText{ std::to_string(wipSolutions.size()) + "/" + std::to_string(wipSolutions.size()) });
-		bar.mark_as_completed();
+		bar.set_progress(wipSolutions.size());
+		
 
 		auto solutionsBeforeRemove = newSolutions.size();
 
