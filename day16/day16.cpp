@@ -294,11 +294,11 @@ struct Move {
 	int move;
 };
 
-std::vector<Move> getMoves(const std::vector<Node>& nodes, int currentNode, int prevNode, std::uint64_t toOpen) {
-	std::vector<Move> returnVec;
+void getMoves(std::vector<Move>& moves, const std::vector<Node>& nodes, int currentNode, int prevNode, std::uint64_t toOpen) {
+
 
 	if (toOpen & 1ull << currentNode) {
-		returnVec.emplace_back(true, -1);
+		moves.emplace_back(true, -1);
 	}
 
 	for (auto next : nodes[currentNode].nextNodes) {
@@ -306,10 +306,8 @@ std::vector<Move> getMoves(const std::vector<Node>& nodes, int currentNode, int 
 			continue;
 		}
 
-		returnVec.emplace_back(false, next);
+		moves.emplace_back(false, next);
 	}
-
-	return returnVec;
 }
 
 int main(int argc, char* argv[]) {
@@ -402,8 +400,13 @@ int main(int argc, char* argv[]) {
 				continue;
 			}
 
-			auto meMoves = getMoves(graph, solution.currentNode, solution.prevNode, solution.valvesStillToOpen);
-			auto elephantMoves = getMoves(graph, solution.agent2CurrentNode, solution.agent2PrevNode, solution.valvesStillToOpen);
+			static std::vector<Move> meMoves;
+			static std::vector<Move> elephantMoves;
+			meMoves.clear();
+			elephantMoves.clear();
+
+			getMoves(meMoves, graph, solution.currentNode, solution.prevNode, solution.valvesStillToOpen);
+			getMoves(elephantMoves, graph, solution.agent2CurrentNode, solution.agent2PrevNode, solution.valvesStillToOpen);
 
 			for (auto& myMove : meMoves) {
 				for (auto& elephantMove : elephantMoves) {
