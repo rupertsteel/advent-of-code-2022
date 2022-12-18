@@ -15,6 +15,7 @@
 #include <functional>
 #include <variant>
 #include <thread>
+#include <stack>
 
 #include <fmt/ranges.h>
 #include <fmt/chrono.h>
@@ -50,6 +51,15 @@ int main(int argc, char* argv[]) {
 
 	std::set<Point> shape;
 
+	std::set<Point> outsidePoints;
+
+	int minX = std::numeric_limits<int>::max();
+	int minY = std::numeric_limits<int>::max();
+	int minZ = std::numeric_limits<int>::max();
+	int maxX = std::numeric_limits<int>::min();
+	int maxY = std::numeric_limits<int>::min();
+	int maxZ = std::numeric_limits<int>::min();
+
 	for (auto line : inputIntoLines) {
 		auto str = std::string{ line };
 
@@ -60,10 +70,75 @@ int main(int argc, char* argv[]) {
 		auto y = std::stoi(results[2].str());
 		auto z = std::stoi(results[3].str());
 
+		minX = std::min(minX, x);
+		minY = std::min(minY, y);
+		minZ = std::min(minZ, z);
+
+		maxX = std::max(maxX, x);
+		maxY = std::max(maxY, y);
+		maxZ = std::max(maxZ, z);
+
 		shape.emplace(x, y, z);
 	}
 
+	// expand the max/min bounds to make sure there it at least 1 cell on every side
+	minX--;
+	minY--;
+	minZ--;
+	maxX++;
+	maxY++;
+	maxZ++;
+
+	std::stack<Point> outsidePointsToProcess;
+
+	outsidePointsToProcess.emplace(minX, minY, minZ);
+
+	while (!outsidePointsToProcess.empty()) {
+		auto point = outsidePointsToProcess.top();
+		outsidePointsToProcess.pop();
+
+		if (outsidePoints.contains(point)) {
+			// we have already processed this point, no need to do it again
+			continue;
+		}
+
+		// add this point to the outside shape
+		outsidePoints.insert(point);
+
+		// now add the up-to 6 orthogonal points touching this that are also in bound to the stack
+		auto checkThenAdd = [&](int dx, int dy, int dz) {
+			auto testPoint = point;
+			testPoint.x += dx;
+			testPoint.y += dy;
+			testPoint.z += dz;
+
+			if (testPoint.x < minX || testPoint.x > maxX) {
+				return;
+			}
+			if (testPoint.y < minY || testPoint.y > maxY) {
+				return;
+			}
+			if (testPoint.z < minZ || testPoint.z > maxZ) {
+				return;
+			}
+
+			if (shape.contains(testPoint)) {
+				return;
+			}
+
+			outsidePointsToProcess.push(testPoint);
+		};
+
+		checkThenAdd(1, 0, 0);
+		checkThenAdd(-1, 0, 0);
+		checkThenAdd(0, 1, 0);
+		checkThenAdd(0, -1, 0);
+		checkThenAdd(0, 0, 1);
+		checkThenAdd(0, 0, -1);
+	}
+
 	int surfaceArea = 0;
+	int outsideSurfaceArea = 0;
 
 	for (const auto p : shape) {
 		auto testAndApply = [&](int dx, int dy, int dz) {
@@ -74,6 +149,10 @@ int main(int argc, char* argv[]) {
 
 			if (!shape.contains(testPoint)) {
 				surfaceArea++;
+			}
+
+			if (outsidePoints.contains(testPoint)) {
+				outsideSurfaceArea++;
 			}
 		};
 
@@ -88,6 +167,7 @@ int main(int argc, char* argv[]) {
 	auto end = std::chrono::high_resolution_clock::now();
 
 	fmt::print("Part 1: surface area: {}\n", surfaceArea);
+	fmt::print("Part 2: outside surface area: {}\n", outsideSurfaceArea);
 
 
 	auto dur = end - start;
