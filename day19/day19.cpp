@@ -83,9 +83,20 @@ int main(int argc, char* argv[]) {
 		};
 	});
 
-	int quality = 0;
+#if 0 // part 1
+	constexpr int stopTime = 24;
+#else
+	constexpr int stopTime = 32;
+#endif
 
+	int quality = 0;
+	int multiplyScore = 1;
+
+#if 0 // part 1
 	for (auto blueprint : blueprints) {
+#else
+	for (auto blueprint : blueprints | std::views::take(3)) {
+#endif
 		std::stack<Solution> solutions;
 
 		for (int i = 0; i < 4; i++) {
@@ -131,7 +142,7 @@ int main(int argc, char* argv[]) {
 
 			iter++;
 
-			if (baseSolution.minute == 24) {
+			if (baseSolution.minute == stopTime) {
 				// we are done here
 				bestScore = std::max(bestScore, baseSolution.amountGeode);
 
@@ -187,14 +198,16 @@ int main(int argc, char* argv[]) {
 			}
 		}
 
-		fmt::print("Blueprint {}: score {}", blueprint.id, bestScore);
+		fmt::print("Blueprint {}: score {}\n", blueprint.id, bestScore);
 
 		quality += blueprint.id * bestScore;
+		multiplyScore *= bestScore;
 	}
 
 	auto end = std::chrono::high_resolution_clock::now();
 
 	fmt::print("Part 1: quality {}\n", quality);
+	fmt::print("Part 2: best score {}\n", multiplyScore);
 
 	auto dur = end - start;
 
