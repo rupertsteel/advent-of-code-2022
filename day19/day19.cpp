@@ -53,10 +53,12 @@ struct Solution {
 	int amountClay;
 	int amountObsidian;
 	int amountGeode;
+
+	int nextRobot;
 };
 
 int main(int argc, char* argv[]) {
-	std::ifstream inputFile("inputs/day19-test.txt");
+	std::ifstream inputFile("inputs/day19.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
 
 	auto start = std::chrono::high_resolution_clock::now();
@@ -86,16 +88,18 @@ int main(int argc, char* argv[]) {
 	for (auto blueprint : blueprints) {
 		std::stack<Solution> solutions;
 
-		Solution start{
-			1, 1, 0, 0, 0, 0, 0, 0, 0
-		};
+		for (int i = 0; i < 4; i++) {
+			Solution start{
+				1, 1, 0, 0, 0, 0, 0, 0, 0, i
+			};
 
-		solutions.push(start);
+			solutions.push(start);
+		}
 
 		int bestScore = 0;
 
 
-		int iter = 0;
+		size_t iter = 0;
 
 		while (!solutions.empty()) {
 			auto baseSolution = solutions.top();
@@ -139,34 +143,42 @@ int main(int argc, char* argv[]) {
 			}
 			baseSolution.minute++;
 
-			if (canOreMinerBeMade) {
+			if (baseSolution.nextRobot == 0 && canOreMinerBeMade) {
 				auto newSolution = baseSolution;
 				newSolution.amountOre -= blueprint.oreRobotOreCost;
 				newSolution.numOreMiners++;
-				solutions.push(newSolution);
-			}
-			if (canClayMinerBeMade) {
+
+				for (int i = 0; i < 4; i++) {
+					newSolution.nextRobot = i;
+					solutions.push(newSolution);
+				}
+			} else if (baseSolution.nextRobot == 1 && canClayMinerBeMade) {
 				auto newSolution = baseSolution;
 				newSolution.amountOre -= blueprint.clayRobotOreCost;
 				newSolution.numClayMiners++;
-				solutions.push(newSolution);
-			}
-			if (canObsidianMinerBeMade) {
+				for (int i = 0; i < 4; i++) {
+					newSolution.nextRobot = i;
+					solutions.push(newSolution);
+				}
+			} else if (baseSolution.nextRobot == 2 && canObsidianMinerBeMade) {
 				auto newSolution = baseSolution;
 				newSolution.amountOre -= blueprint.obsidianRobotOreCost;
 				newSolution.amountClay -= blueprint.obsidianRobotClayCost;
 				newSolution.numObsidianMiners++;
-				solutions.push(newSolution);
-			}
-			if (canGeodeMinerBeMade) {
+				for (int i = 0; i < 4; i++) {
+					newSolution.nextRobot = i;
+					solutions.push(newSolution);
+				}
+			} else if (baseSolution.nextRobot == 3 && canGeodeMinerBeMade) {
 				auto newSolution = baseSolution;
 				newSolution.amountOre -= blueprint.geodeRobotOreCost;
 				newSolution.amountObsidian -= blueprint.geodeRobotObsidianCost;
 				newSolution.numGeodeMiners++;
-				solutions.push(newSolution);
-			}
-
-			if (!mustMakeRobot) {
+				for (int i = 0; i < 4; i++) {
+					newSolution.nextRobot = i;
+					solutions.push(newSolution);
+				}
+			} else {
 				solutions.push(baseSolution);
 			}
 
