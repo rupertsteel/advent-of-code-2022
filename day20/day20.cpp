@@ -104,11 +104,21 @@ private:
 static_assert(std::bidirectional_iterator<VectorWrapIterator<int>>);
 
 struct Element {
-	int value;
-	int uniqueId;
+	int64_t value;
+	int64_t uniqueId;
 
 	bool operator==(const Element&) const = default;
 };
+
+int64_t signMod(int64_t value, size_t size) {
+
+	if (value < 0) {
+		return -(std::abs(value) % size);
+	} else {
+		return value % size;
+	}
+
+}
 
 int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day20.txt");
@@ -122,7 +132,9 @@ int main(int argc, char* argv[]) {
 	std::vector<Element> elementsToMix;
 
 	for (auto line : inputIntoLines) {
-		auto num = std::stoi(line);
+		uint64_t num = std::stoi(line);
+
+		num *= 811589153;
 
 		Element element{ num, elements.size() };
 
@@ -131,47 +143,41 @@ int main(int argc, char* argv[]) {
 		elementsToMix.push_back(element);
 	}
 
-	for (auto elemToMove : elementsToMix) {
-		// get the value
+	for (int i = 0; i < 10; i++) {
+		for (auto elemToMove : elementsToMix) {
+			// get the value
 
-		auto elemIt = std::find(elements.begin(), elements.end(), elemToMove);
+			auto elemIt = std::find(elements.begin(), elements.end(), elemToMove);
 
-		auto replaceIt = elements.erase(elemIt);
+			auto replaceIt = elements.erase(elemIt);
 
-		VectorWrapIterator<Element> it(replaceIt, elements);
+			VectorWrapIterator<Element> it(replaceIt, elements);
 
-		if (elemToMove.value < 0) {
-			std::advance(it, elemToMove.value);
+			if (elemToMove.value < 0) {
+				auto toMove = signMod(elemToMove.value, elements.size());
 
-			if (it.base() == elements.begin()) {
-				elements.insert(elements.end(), elemToMove);
+				std::advance(it, toMove);
+
+				if (it.base() == elements.begin()) {
+					elements.insert(elements.end(), elemToMove);
+				} else {
+					elements.insert(it.base(), elemToMove);
+				}
 			} else {
+				auto toMove = elemToMove.value % elements.size();
+
+				std::advance(it, toMove);
+
 				elements.insert(it.base(), elemToMove);
 			}
-		} else {
-			std::advance(it, elemToMove.value);
-
-			elements.insert(it.base(), elemToMove);
 		}
-
-		
-
-		//elements.insert(it.base(), elemToMove);
-		
-		// reduce it a bit
-
-		//auto res = std::div(val, elements.size());
-
-		//val %= elements.size();
-
-		// now we need to move this element this many elements forward (or backward)
 	}
 
 	auto itOfZero = std::find_if(elements.begin(), elements.end(), [](auto e) {return e.value == 0; });
 
 	VectorWrapIterator<Element> it(itOfZero, elements);
 
-	int quality = 0;
+	int64_t quality = 0;
 
 	for (int i = 0; i < 3; i++) {
 		std::advance(it, 1000);
