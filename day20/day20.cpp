@@ -32,43 +32,50 @@
 using namespace std::string_view_literals;
 using namespace std::string_literals;
 
-struct ListWrapIterator {
-	using Base = std::list<int>::iterator;
+template<typename T>
+struct VectorWrapIterator {
+	using Base = std::vector<T>::iterator;
 
 	using difference_type = Base::difference_type;
 	using value_type = Base::value_type;
 
-	ListWrapIterator() : it(), cont(nullptr) {}
+	VectorWrapIterator() : it(), cont(nullptr) {}
 
-	ListWrapIterator(Base startIt, std::list<int>& cont) : it(startIt), cont(&cont) {}
+	VectorWrapIterator(Base startIt, std::vector<T>& cont) : cont(&cont) {
+		if (startIt == cont.end()) {
+			it = cont.begin();
+		} else {
+			it = startIt;
+		}
+	}
 
-	ListWrapIterator(const ListWrapIterator&) = default;
-	ListWrapIterator& operator=(const ListWrapIterator&) = default;
+	VectorWrapIterator(const VectorWrapIterator&) = default;
+	VectorWrapIterator& operator=(const VectorWrapIterator&) = default;
 
-	ListWrapIterator(ListWrapIterator&&) = default;
-	ListWrapIterator& operator=(ListWrapIterator&&) = default;
+	VectorWrapIterator(VectorWrapIterator&&) = default;
+	VectorWrapIterator& operator=(VectorWrapIterator&&) = default;
 
-	int& operator*() const {
+	T& operator*() const {
 		return *it;
 	}
-	int* operator->() const {
+	T* operator->() const {
 		return &(*it);
 	}
 
-	ListWrapIterator& operator++() {
+	VectorWrapIterator& operator++() {
 		++it;
 		if (it == cont->end()) {
 			it = cont->begin();
 		}
 		return *this;
 	}
-	ListWrapIterator operator++(int) {
+	VectorWrapIterator operator++(int) {
 		auto self = *this;
 		operator++();
 		return self;
 	}
 
-	ListWrapIterator& operator--() {
+	VectorWrapIterator& operator--() {
 		if (it == cont->begin()) {
 			it = std::prev(cont->end());
 		} else {
@@ -77,7 +84,7 @@ struct ListWrapIterator {
 
 		return *this;
 	}
-	ListWrapIterator operator--(int) {
+	VectorWrapIterator operator--(int) {
 		auto self = *this;
 		operator--();
 		return self;
@@ -87,14 +94,21 @@ struct ListWrapIterator {
 		return it;
 	}
 
-	bool operator==(const ListWrapIterator& o) const = default;
+	bool operator==(const VectorWrapIterator& o) const = default;
 
 private:
 	Base it;
-	std::list<int>* cont;
+	std::vector<T>* cont;
 };
 
-static_assert(std::bidirectional_iterator<ListWrapIterator>);
+static_assert(std::bidirectional_iterator<VectorWrapIterator<int>>);
+
+struct Element {
+	int value;
+	int uniqueId;
+
+	bool operator==(const Element&) const = default;
+};
 
 int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day20.txt");
@@ -104,20 +118,46 @@ int main(int argc, char* argv[]) {
 
 	auto inputIntoLines = std::string_view{ input } | std::views::split("\n"sv) | std::views::transform([](auto rng) { return std::string(rng.begin(), rng.end()); }) | std::views::filter([](auto str) { return !str.empty(); });
 
-	std::list<int> elements;
-	std::vector<std::list<int>::iterator> elementsToMix;
+	std::vector<Element> elements;
+	std::vector<Element> elementsToMix;
 
 	for (auto line : inputIntoLines) {
 		auto num = std::stoi(line);
 
-		elements.push_back(num);
+		Element element{ num, elements.size() };
 
-		elementsToMix.push_back(std::prev(elements.end()));
+		elements.push_back(element);
+
+		elementsToMix.push_back(element);
 	}
 
 	for (auto elemToMove : elementsToMix) {
 		// get the value
-		auto val = *elemToMove;
+
+		auto elemIt = std::find(elements.begin(), elements.end(), elemToMove);
+
+		auto replaceIt = elements.erase(elemIt);
+
+		VectorWrapIterator<Element> it(replaceIt, elements);
+
+		if (elemToMove.value < 0) {
+			std::advance(it, elemToMove.value);
+
+			if (it.base() == elements.begin()) {
+				elements.insert(elements.end(), elemToMove);
+			} else {
+				elements.insert(it.base(), elemToMove);
+			}
+		} else {
+			std::advance(it, elemToMove.value);
+
+			elements.insert(it.base(), elemToMove);
+		}
+
+		
+
+		//elements.insert(it.base(), elemToMove);
+		
 		// reduce it a bit
 
 		//auto res = std::div(val, elements.size());
@@ -125,38 +165,20 @@ int main(int argc, char* argv[]) {
 		//val %= elements.size();
 
 		// now we need to move this element this many elements forward (or backward)
-		ListWrapIterator it(elemToMove, elements);
-		if (val > 0) {
-			std::advance(it, val + 1);
-
-			if (it.base() == elements.begin()) {
-				elements.splice(elements.end(), elements, elemToMove);
-			} else {
-				elements.splice(it.base(), elements, elemToMove);
-			}
-		} else if (val < 0) {
-			std::advance(it, val);
-
-			if (it.base() == elements.begin()) {
-				elements.splice(elements.end(), elements, elemToMove);
-			} else {
-				elements.splice(it.base(), elements, elemToMove);
-			}
-		}
 	}
 
-	auto itOfZero = std::find(elements.begin(), elements.end(), 0);
+	auto itOfZero = std::find_if(elements.begin(), elements.end(), [](auto e) {return e.value == 0; });
 
-	ListWrapIterator it(itOfZero, elements);
+	VectorWrapIterator<Element> it(itOfZero, elements);
 
 	int quality = 0;
 
 	for (int i = 0; i < 3; i++) {
 		std::advance(it, 1000);
 
-		fmt::print("Val {}\n", *it);
+		fmt::print("Val {}\n", it->value);
 
-		quality += *it;
+		quality += it->value;
 	}
 
 
