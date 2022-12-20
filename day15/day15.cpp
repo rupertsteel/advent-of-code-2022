@@ -93,6 +93,8 @@ int main(int argc, char* argv[]) {
 
 	std::set<Position> beacons;
 
+	std::vector<Position> possibleTargetPositions;
+
 	auto sensors = inputIntoLines | std::views::transform([&line_regex](const std::string& s) {
 		std::smatch results;
 
@@ -106,9 +108,104 @@ int main(int argc, char* argv[]) {
 		};
 	});
 
+
 	for (auto sensor : sensors) {
 		beacons.emplace(sensor.beaconX, sensor.beaconY);
+
+		auto deltaX = sensor.posX - sensor.beaconX;
+		auto deltaY = sensor.posY - sensor.beaconY;
+
+		auto distToBeacon = std::abs(deltaX) + std::abs(deltaY);
+
+		// add all required target cells,
+		// these have dist + 1
+
+		// top, down right
+		{
+			int placeX = sensor.posX;
+			int placeY = sensor.posY + distToBeacon + 1;
+
+			if (placeX >= 0 && placeX <= 4000000 && placeY >= 0 && placeY <= 4000000) {
+				possibleTargetPositions.emplace_back(placeX, placeY);
+			}
+			for (int i = 0; i < distToBeacon; i++) {
+				placeX++;
+				placeY--;
+
+				if (placeX >= 0 && placeX <= 4000000 && placeY >= 0 && placeY <= 4000000) {
+					possibleTargetPositions.emplace_back(placeX, placeY);
+				}
+			}
+		}
+		// bot, up left
+		{
+			int placeX = sensor.posX;
+			int placeY = sensor.posY - distToBeacon - 1;
+
+			if (placeX >= 0 && placeX <= 4000000 && placeY >= 0 && placeY <= 4000000) {
+				possibleTargetPositions.emplace_back(placeX, placeY);
+			}
+			for (int i = 0; i < distToBeacon; i++) {
+				placeX--;
+				placeY++;
+				
+				if (placeX >= 0 && placeX <= 4000000 && placeY >= 0 && placeY <= 4000000) {
+					possibleTargetPositions.emplace_back(placeX, placeY);
+				}
+			}
+		}
+		// right, down left
+		{
+			int placeX = sensor.posX + distToBeacon + 1;
+			int placeY = sensor.posY;
+
+			if (placeX >= 0 && placeX <= 4000000 && placeY >= 0 && placeY <= 4000000) {
+				possibleTargetPositions.emplace_back(placeX, placeY);
+			}
+			for (int i = 0; i < distToBeacon; i++) {
+				placeX--;
+				placeY--;
+				
+				if (placeX >= 0 && placeX <= 4000000 && placeY >= 0 && placeY <= 4000000) {
+					possibleTargetPositions.emplace_back(placeX, placeY);
+				}
+			}
+		}
+		// left, up right
+		{
+			int placeX = sensor.posX - distToBeacon - 1;
+			int placeY = sensor.posY;
+
+			if (placeX >= 0 && placeX <= 4000000 && placeY >= 0 && placeY <= 4000000) {
+				possibleTargetPositions.emplace_back(placeX, placeY);
+			}
+			for (int i = 0; i < distToBeacon; i++) {
+				placeX++;
+				placeY++;
+				
+				if (placeX >= 0 && placeX <= 4000000 && placeY >= 0 && placeY <= 4000000) {
+					possibleTargetPositions.emplace_back(placeX, placeY);
+				}
+			}
+		}
 	}
+
+	// now drop all targets that are within range
+	for (auto sensor : sensors) {
+		auto deltaX = sensor.posX - sensor.beaconX;
+		auto deltaY = sensor.posY - sensor.beaconY;
+
+		auto distToBeacon = std::abs(deltaX) + std::abs(deltaY);
+
+		std::erase_if(possibleTargetPositions, [&](auto& pos) {
+			auto posDx = sensor.posX - pos.x;
+			auto posDy = sensor.posY - pos.y;
+
+			auto posDistToBeacon = std::abs(posDx) + std::abs(posDy);
+			return posDistToBeacon <= distToBeacon;
+		});
+	}
+
 
 	// On the target line, each sensor may have a range where beacons cannot be located.
 	// We get all of the ranges
@@ -183,6 +280,14 @@ int main(int argc, char* argv[]) {
 	auto end = std::chrono::high_resolution_clock::now();
 
 	fmt::print("Part 1, num cells {}\n", numCells);
+
+	fmt::print("Part 2, num cells {}\n", possibleTargetPositions.size());
+
+	if (!possibleTargetPositions.empty()) {
+		size_t freq = possibleTargetPositions.front().x * 4000000ll + possibleTargetPositions.front().y;
+
+		fmt::print("Part 2, freq {}\n", freq);
+	}
 
 	auto dur = end - start;
 
