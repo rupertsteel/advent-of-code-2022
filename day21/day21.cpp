@@ -49,6 +49,12 @@ public:
 	virtual bool isValue() const {
 		return false;
 	}
+	virtual bool isHuman() const {
+		return false;
+	}
+	virtual bool isOp() const {
+		return false;
+	}
 	virtual int64_t calculate() const = 0;
 
 	virtual std::string str() const = 0;
@@ -108,6 +114,10 @@ public:
 	std::string str() const override {
 		return "(" + left->str() + " " + op + " " + right->str() + ")";
 	}
+
+	bool isOp() const override {
+		return true;
+	}
 };
 
 class RootTreeNode : public TreeNode {
@@ -142,6 +152,10 @@ public:
 
 	std::string str() const override {
 		return "X";
+	}
+
+	bool isHuman() const override {
+		return true;
 	}
 };
 
@@ -184,6 +198,143 @@ bool tryReduceTree(std::shared_ptr<TreeNode>& node) {
 		}
 
 		return tryReduceTree(op->right);
+	}
+
+	return false;
+}
+
+bool tryFoldTree(const std::shared_ptr<RootTreeNode>& node) {
+	// assume that right is always a value (it is for me)
+	// also assume we have only one human node in the tree
+
+	// then we check left, if it is a human node, we are done
+	if (node->left->isHuman()) {
+		return false;
+	}
+
+	// then it will be a op node,
+	// and one of its nodes will be a value, and the other another tree
+
+	auto leftOp = std::dynamic_pointer_cast<OperationTreeNode>(node->left);
+
+	// forms are:
+	// C: const
+	// U: non const
+	// C1 + U = C2  => U = (C2 - C1)
+	if (leftOp->left->isConst() && !leftOp->right->isConst() && leftOp->op == '+') {
+		auto c1 = leftOp->left;
+		auto c2 = node->right;
+
+		auto u = leftOp->right;
+
+		auto newRight = std::make_shared<OperationTreeNode>(c2, c1, '-');
+
+		node->left = u;
+		node->right = newRight;
+
+		return true;
+	}
+
+	// U + C1 = C2  => U = (C2 - C1)
+	if (!leftOp->left->isConst() && leftOp->right->isConst() && leftOp->op == '+') {
+		auto u = leftOp->left;
+		auto c1 = leftOp->right;
+
+		auto c2 = node->right;
+
+		auto newRight = std::make_shared<OperationTreeNode>(c2, c1, '-');
+
+		node->left = u;
+		node->right = newRight;
+
+		return true;
+	}
+
+	// C1 - U = C2  => C1 = C2 + U => C2 + U = C1
+	if (leftOp->left->isConst() && !leftOp->right->isConst() && leftOp->op == '-') {
+		auto c1 = leftOp->left;
+		auto u = leftOp->right;
+
+		auto c2 = node->right;
+
+		auto newLeft = std::make_shared<OperationTreeNode>(c2, u, '+');
+
+		node->left = newLeft;
+		node->right = c1;
+
+		return true;
+	}
+
+	// U - C1 = C2  => U = C2 + C1
+	if (!leftOp->left->isConst() && leftOp->right->isConst() && leftOp->op == '-') {
+		auto u = leftOp->left;
+		auto c1 = leftOp->right;
+		auto c2 = node->right;
+
+		auto newRight = std::make_shared<OperationTreeNode>(c2, c1, '+');
+		node->left = u;
+		node->right = newRight;
+
+		return true;
+	}
+
+	// C1 * U = C2  => U = C2 / C1
+	if (leftOp->left->isConst() && !leftOp->right->isConst() && leftOp->op == '*') {
+		auto c1 = leftOp->left;
+		auto u = leftOp->right;
+		auto c2 = node->right;
+
+		auto newRight = std::make_shared<OperationTreeNode>(c2, c1, '/');
+
+		node->left = u;
+		node->right = newRight;
+
+		return true;
+	}
+
+	// U * C1 = C2  => U = C2 / C1
+	if (!leftOp->left->isConst() && leftOp->right->isConst() && leftOp->op == '*') {
+		auto u = leftOp->left;
+
+		auto c1 = leftOp->right;
+
+		auto c2 = node->right;
+
+		auto newRight = std::make_shared<OperationTreeNode>(c2, c1, '/');
+
+		node->left = u;
+		node->right = newRight;
+
+		return true;
+	}
+
+	// C1 / U = C2  => C1 = C2 * U => C2 * U = C1
+	// this isn't actually needed, but I implemented it anyway
+	if (leftOp->left->isConst() && !leftOp->right->isConst() && leftOp->op == '/') {
+		auto c1 = leftOp->left;
+		auto u = leftOp->right;
+		auto c2 = node->right;
+
+		auto newLeft = std::make_shared<OperationTreeNode>(c2, u, '*');
+		node->left = newLeft;
+		node->right = c1;
+
+		return true;
+	}
+
+	// U / C1 = C2  => U = C2 * C1
+	if (!leftOp->left->isConst() && leftOp->right->isConst() && leftOp->op == '/') {
+		auto u = leftOp->left;
+		auto c1 = leftOp->right;
+
+		auto c2 = node->right;
+
+		auto newRight = std::make_shared<OperationTreeNode>(c2, c1, '*');
+
+		node->left = u;
+		node->right = newRight;
+
+		return true;
 	}
 
 	return false;
@@ -271,7 +422,26 @@ int main(int argc, char* argv[]) {
 
 	fmt::print("Root {}\n", root->str());
 
+	auto rootTreeNodeAsRootType = std::dynamic_pointer_cast<RootTreeNode>(root);
 
+	// step 4: equality folding
+	while (true) {
+		auto didFold = tryFoldTree(rootTreeNodeAsRootType);
+
+		if (!didFold) {
+			break;
+		}
+
+		while (true) {
+			auto didReduce = tryReduceTree(root);
+
+			if (!didReduce) {
+				break;
+			}
+		}
+
+		fmt::print("Root {}\n", root->str());
+	}
 
 	auto end = std::chrono::high_resolution_clock::now();
 
