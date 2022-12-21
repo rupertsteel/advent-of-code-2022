@@ -41,6 +41,154 @@ struct Operation {
 	char op;
 };
 
+class TreeNode {
+public:
+	virtual ~TreeNode() {}
+
+	virtual bool isConst() const = 0;
+	virtual bool isValue() const {
+		return false;
+	}
+	virtual int64_t calculate() const = 0;
+
+	virtual std::string str() const = 0;
+};
+
+class ValueTreeNode : public TreeNode {
+public:
+	ValueTreeNode(int64_t value): value(value) {
+	}
+
+	int64_t value;
+
+	bool isConst() const override {
+		return true;
+	}
+
+	int64_t calculate() const override {
+		return value;
+	}
+
+	std::string str() const override {
+		return std::to_string(value);
+	}
+
+	bool isValue() const override {
+		return true;
+	}
+};
+
+class OperationTreeNode : public TreeNode {
+public:
+	OperationTreeNode(std::shared_ptr<TreeNode> left, std::shared_ptr<TreeNode> right, char op) : left(left), right(right), op(op) {}
+
+	std::shared_ptr<TreeNode> left;
+	std::shared_ptr<TreeNode> right;
+	char op;
+
+	bool isConst() const override {
+		return left->isConst() && right->isConst();
+	}
+
+	int64_t calculate() const override {
+		auto leftVal = left->calculate();
+		auto rightVal = right->calculate();
+
+		if (op == '+') {
+			return leftVal + rightVal;
+		} else if (op == '-') {
+			return leftVal - rightVal;
+		} else if (op == '*') {
+			return leftVal * rightVal;
+		} else {
+			return leftVal / rightVal;
+		}
+	}
+
+	std::string str() const override {
+		return "(" + left->str() + " " + op + " " + right->str() + ")";
+	}
+};
+
+class RootTreeNode : public TreeNode {
+public:
+	RootTreeNode(std::shared_ptr<TreeNode> left, std::shared_ptr<TreeNode> right) : left(left), right(right) {}
+
+	std::shared_ptr<TreeNode> left;
+	std::shared_ptr<TreeNode> right;
+
+	bool isConst() const override {
+		return left->isConst() && right->isConst();
+	}
+
+	int64_t calculate() const override {
+		throw std::runtime_error("calculate on root");
+	}
+
+	std::string str() const override {
+		return left->str() + " == " + right->str();
+	}
+};
+
+class HumanTreeNode : public TreeNode {
+public:
+	bool isConst() const override {
+		return false;
+	}
+
+	int64_t calculate() const override {
+		throw std::runtime_error("calculate on human");
+	}
+
+	std::string str() const override {
+		return "X";
+	}
+};
+
+bool tryReduceTree(std::shared_ptr<TreeNode>& node) {
+	if (auto root = std::dynamic_pointer_cast<RootTreeNode>(node); root) {
+		if (!root->left->isValue() && root->left->isConst()) {
+			auto newNode = std::make_shared<ValueTreeNode>(root->left->calculate());
+			root->left = newNode;
+			return true;
+		}
+
+		if (!root->right->isValue() && root->right->isConst()) {
+			auto newNode = std::make_shared<ValueTreeNode>(root->right->calculate());
+			root->right = newNode;
+			return true;
+		}
+
+		auto res = tryReduceTree(root->left);
+		if (res) {
+			return true;
+		}
+
+		return tryReduceTree(root->right);
+	} else if (auto op = std::dynamic_pointer_cast<OperationTreeNode>(node); op) {
+		if (!op->left->isValue() && op->left->isConst()) {
+			auto newNode = std::make_shared<ValueTreeNode>(op->left->calculate());
+			op->left = newNode;
+			return true;
+		}
+
+		if (!op->right->isValue() && op->right->isConst()) {
+			auto newNode = std::make_shared<ValueTreeNode>(op->right->calculate());
+			op->right = newNode;
+			return true;
+		}
+
+		auto res = tryReduceTree(op->left);
+		if (res) {
+			return true;
+		}
+
+		return tryReduceTree(op->right);
+	}
+
+	return false;
+}
+
 int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day21.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
@@ -50,11 +198,12 @@ int main(int argc, char* argv[]) {
 	auto inputIntoLines = std::string_view{ input } | std::views::split("\n"sv) | std::views::transform([](auto rng) { return std::string(rng.begin(), rng.end()); }) | std::views::filter([](auto str) { return !str.empty(); });
 
 	std::unordered_map<std::string, int64_t> knownNumbers;
-
-	std::list<Operation> operationsToDo;
+	std::unordered_map<std::string, Operation> knownOperations;
 
 	const std::regex numberRegex(R"((\w{4}): (\d+))");
 	const std::regex operationRegex(R"((\w{4}): (\w{4}) (.) (\w{4}))");
+
+	// step 1 parse all elements
 
 	for (auto line : inputIntoLines) {
 		std::smatch matchResults;
@@ -63,48 +212,70 @@ int main(int argc, char* argv[]) {
 			knownNumbers[matchResults[1].str()] = std::stoi(matchResults[2].str());
 		}
 		if (std::regex_match(line, matchResults, operationRegex)) {
-			operationsToDo.emplace_back(
+
+			knownOperations[matchResults[1].str()] = Operation{
 				matchResults[1].str(),
 				matchResults[2].str(),
 				matchResults[4].str(),
 
 				*matchResults[3].first
-			);
+			};
 		}
 	}
 
-	while (!operationsToDo.empty()) {
-		
+	// step 2: build tree
 
-		for (auto it = operationsToDo.begin(); it != operationsToDo.end();) {
-			if (knownNumbers.contains(it->leftValue) && knownNumbers.contains(it->rightValue)) {
-				auto left = knownNumbers[it->leftValue];
-				auto right = knownNumbers[it->rightValue];
+	std::shared_ptr<TreeNode> root;
+	{
 
-				long long result = 0;
-
-				if (it->op == '+') {
-					result = left + right;
-				} else if (it->op == '-') {
-					result = left - right;
-				} else if (it->op == '*') {
-					result = left * right;
-				} else if (it->op == '/') {
-					result = left / right;
-				}
-
-				knownNumbers[it->destValue] = result;
-
-				it = operationsToDo.erase(it);
+		std::unordered_map<std::string, std::shared_ptr<TreeNode>> builtTreeElements;
+		for (auto& num : knownNumbers) {
+			if (num.first == "humn") {
+				builtTreeElements[num.first] = std::make_shared<HumanTreeNode>();
 			} else {
-				++it;
+				builtTreeElements[num.first] = std::make_shared<ValueTreeNode>(num.second);
 			}
 		}
+
+		while (!knownOperations.empty()) {
+			for (auto it = knownOperations.begin(); it != knownOperations.end();) {
+				if (builtTreeElements.contains(it->second.leftValue) && builtTreeElements.contains(it->second.rightValue)) {
+					auto left = builtTreeElements[it->second.leftValue];
+					auto right = builtTreeElements[it->second.rightValue];
+
+					if (it->first == "root") {
+						builtTreeElements[it->first] = std::make_shared<RootTreeNode>(left, right);
+					} else {
+						builtTreeElements[it->first] = std::make_shared<OperationTreeNode>(left, right, it->second.op);
+					}
+
+					it = knownOperations.erase(it);
+				} else {
+					++it;
+				}
+			}
+		}
+
+		root = builtTreeElements["root"];
 	}
+
+	// step 3: reduce tree
+
+	while (true) {
+		auto didReduce = tryReduceTree(root);
+
+		if (!didReduce) {
+			break;
+		}
+	}
+
+	fmt::print("Root {}\n", root->str());
+
+
 
 	auto end = std::chrono::high_resolution_clock::now();
 
-	fmt::print("Root {}\n", knownNumbers["root"]);
+	
 
 	auto dur = end - start;
 
