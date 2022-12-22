@@ -78,14 +78,62 @@ struct Tile {
 
 	std::array<std::array<Cell, tileSize>, tileSize> cells;
 
+	std::array<std::array<std::optional<int>, tileSize>, tileSize> lastMovementDirection;
+
 	std::array<std::optional<ConnectionMapping>, 4> connectionMappings; // uses facing direction
 };
 
 
+void printGrid(const std::map<int, Tile>& tiles, const std::map<std::pair<int, int>, int>& tileXyMapping) {
+	constexpr int mapWidth = 4; // test
+	constexpr int mapHeight = 3; // test
 
+	// constexpr int mapWidth = 3;
+	// constexpr int mapHeight = 5;
 
-int main(int argc, char* argv[]) {
-	std::ifstream inputFile("inputs/day22.txt");
+	std::string printStr;
+	printStr.reserve((mapWidth * tileSize + 1) * mapHeight * tileSize + 10);
+
+	for (int y = 0; y < tileSize * mapHeight; y++) {
+		for (int x = 0; x < tileSize * mapWidth; x++) {
+			auto tileY = y / tileSize;
+			auto tileX = x / tileSize;
+
+			if (tileXyMapping.contains({tileX, tileY})) {
+				auto tile = tileXyMapping.at({tileX, tileY});
+
+				// print the tile cell
+				auto inTileX = x % tileSize;
+				auto inTileY = y % tileSize;
+
+				auto directionVal = tiles.at(tile).lastMovementDirection[inTileY][inTileX].value_or(-1);
+
+				if (directionVal == 0) {
+					printStr.push_back('>');
+				} else if (directionVal == 1) {
+					printStr.push_back('V');
+				} else if (directionVal == 2) {
+					printStr.push_back('<');
+				} else if (directionVal == 3) {
+					printStr.push_back('^');
+				} else if (tiles.at(tile).cells[inTileY][inTileX] == Cell::Wall) {
+					printStr.push_back('#');
+				} else {
+					printStr.push_back('.');
+				}
+			} else {
+				printStr.push_back(' ');
+			}
+		}
+
+		printStr.push_back('\n');
+	}
+
+	fmt::print("{}\n\n", printStr);
+}
+
+int main(int argc, char* argv[]) try {
+	std::ifstream inputFile("inputs/day22-test.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
 
 	auto start = std::chrono::high_resolution_clock::now();
@@ -226,47 +274,53 @@ int main(int argc, char* argv[]) {
 	int tile = 0;
 	int facing = 0;
 
-	/*auto wrapPos = [&map](int xPos, int yPos, int deltaX, int deltaY) -> std::pair<int, int> {
-		xPos += deltaX;
-		yPos += deltaY;
+	auto wrapPos = [&tiles](int tile, int xPos, int yPos, int facing) -> std::tuple<int, int, int, int> {
+		int newXPos = xPos;
+		int newYPos = yPos;
 
-		if (deltaY == 0) {
-			while (true) {
-				if (xPos < 0) {
-					xPos = map[yPos].size() - 1;
-				}
-				if (xPos >= map[yPos].size()) {
-					xPos = 0;
-				}
-
-				if (map[yPos][xPos] == Cell::OutOfBounds) {
-					xPos += deltaX;
-					continue;
-				}
-
-				return { xPos, yPos };
-			}
+		if (facing == 0) {
+			newXPos++;
+		} else if (facing == 1) {
+			newYPos++;
+		} else if (facing == 2) {
+			newXPos--;
 		} else {
-			while (true) {
-				if (yPos < 0) {
-					yPos = map.size() - 1;
-				}
-				if (yPos >= map.size()) {
-					yPos = 0;
-				}
-
-				if (xPos < map[yPos].size() && map[yPos][xPos] != Cell::OutOfBounds) {
-					return { xPos, yPos };
-				}
-
-				yPos += deltaY;
-			}
+			newYPos--;
 		}
+
+		if (newXPos >= 0 && newXPos < tileSize && newYPos >= 0 && newYPos < tileSize) {
+			return { tile, newXPos, newYPos, facing };
+		}
+
+		// so the facing determines the z coord on the new face (z is x or way, maybe with a negative to make things wrap correctly)
+
+		auto nextTile = tiles[tile].connectionMappings[facing].value().toTile;
+		auto nextFacing = tiles[tile].connectionMappings[facing].value().newFacingDirection;
+
+		int newX;
+		int newY;
+
+		throw std::runtime_error("Not implemented");
+		
+
+		if (newXPos >= tileSize) {
+			// handle right edge
+		} else if (newYPos >= tileSize) {
+			// handle bottom edge
+		} else if (newXPos < 0) {
+			// handle left edge
+		} else {
+			// handle top edge
+		}
+
+		return { 0, 0, 0, 0 };
 	};
 
-	auto cellFree = [&map](int xPos, int yPos) -> bool {
-		return map[yPos][xPos] == Cell::Empty;
+	auto cellFree = [&tiles](int tile, int xPos, int yPos) -> bool {
+		return tiles[tile].cells[yPos][xPos] == Cell::Empty;
 	};
+
+	tiles[tile].lastMovementDirection[yPos][xPos] = facing;
 
 	for (auto ins : instructions) {
 		if (ins.index() == 1) {
@@ -281,42 +335,41 @@ int main(int argc, char* argv[]) {
 					facing = 0;
 				}
 			}
+
+			tiles[tile].lastMovementDirection[yPos][xPos] = facing;
 		} else {
 			auto dist = std::get<0>(ins);
 
-			int deltaX;
-			int deltaY;
+			try {
+				for (int i = 0; i < dist; i++) {
+					auto [nextTile, nextX, nextY, nextFacing] = wrapPos(tile, xPos, yPos, facing);
 
-			if (facing == 0) {
-				deltaX = 1;
-				deltaY = 0;
-			} else if (facing == 1) {
-				deltaX = 0;
-				deltaY = 1;
-			} else if (facing == 2) {
-				deltaX = -1;
-				deltaY = 0;
-			} else {
-				deltaX = 0;
-				deltaY = -1;
-			}
+					if (!cellFree(tile, nextX, nextY)) {
+						break;
+					}
 
-			for (int i = 0; i < dist; i++) {
-				auto [nextX, nextY] = wrapPos(xPos, yPos, deltaX, deltaY);
+					tile = nextTile;
+					xPos = nextX;
+					yPos = nextY;
+					facing = nextFacing;
 
-				if (!cellFree(nextX, nextY)) {
-					break;
+					tiles[tile].lastMovementDirection[yPos][xPos] = facing;
 				}
 
-				xPos = nextX;
-				yPos = nextY;
+				printGrid(tiles, tileXyToId);
+			} catch (std::exception& e) {
+				printGrid(tiles, tileXyToId);
+
+				throw;
 			}
 		}
+
+
 	}
 
-	auto password = (yPos + 1) * 1000 + (xPos + 1) * 4 + facing;*/
 
-	auto password = 0;
+
+	auto password = (tiles[tile].originalY + yPos + 1) * 1000 + (tiles[tile].originalX + xPos + 1) * 4 + facing;
 
 	auto end = std::chrono::high_resolution_clock::now();
 
@@ -330,4 +383,6 @@ int main(int argc, char* argv[]) {
 	fmt::print("Or {}\n", durSecs);
 
 	return 0;
+} catch (std::exception& e) {
+	fmt::print("Exception {}\n", e.what());
 }
