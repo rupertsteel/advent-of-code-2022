@@ -45,6 +45,45 @@ enum class Direction {
 
 using Instruction = std::variant<int, Direction>;
 
+struct ConnectionMapping {
+	int toTile;
+
+	int newFacingDirection;
+};
+
+
+// Test map
+//   0
+// 123
+//   45
+
+
+
+// My map:
+//  01
+//  2
+// 34
+// 5
+
+
+
+constexpr int tileSize = 4;
+// constexpr int tileSize = 50;
+
+struct Tile {
+	int originalX;
+	int originalY;
+
+	char cubeFace = ' ';
+
+	std::array<std::array<Cell, tileSize>, tileSize> cells;
+
+	std::array<std::optional<ConnectionMapping>, 4> connectionMappings; // uses facing direction
+};
+
+
+
+
 int main(int argc, char* argv[]) {
 	std::ifstream inputFile("inputs/day22.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
@@ -55,24 +94,51 @@ int main(int argc, char* argv[]) {
 
 	std::vector<std::vector<Cell>> map;
 
+	std::map<std::pair<int, int>, int> tileXyToId;
+
+	std::map<int, Tile> tiles;
+
 	std::vector<Instruction> instructions;
+
+	int loadY = 0;
 
 	for (auto line : inputIntoLines) {
 		if (line.starts_with(' ') || line.starts_with('.') || line.starts_with('#')) {
 			// map line
-			std::vector<Cell> mapLine;
 
-			for (auto ch : line) {
-				if (ch == ' ') {
-					mapLine.push_back(Cell::OutOfBounds);
-				} else if (ch == '.') {
-					mapLine.push_back(Cell::Empty);
-				} else {
-					mapLine.push_back(Cell::Wall);
+			for (int i = 0; i < line.size(); i += tileSize) {
+				if (line[i] == ' ') {
+					continue;
+				}
+
+				int tileX = i / tileSize;
+				int tileY = loadY / tileSize;
+
+				if (!tileXyToId.contains({tileX, tileY})) {
+					tileXyToId[{tileX, tileY}] = tileXyToId.size();
+				}
+
+				auto tileId = tileXyToId[{tileX, tileY}];
+				if (!tiles.contains(tileId)) {
+					tiles[tileId].originalX = i;
+					tiles[tileId].originalY = loadY;
+				}
+
+				auto inTileY = loadY - tiles[tileId].originalY;
+
+				for (int inTileX = 0; inTileX < tileSize; inTileX++) {
+					auto ch = line[i + inTileX];
+
+					if (ch == '.') {
+						tiles[tileId].cells[inTileY][inTileX] = Cell::Empty;
+					} else {
+						tiles[tileId].cells[inTileY][inTileX] = Cell::Wall;
+					}
 				}
 			}
 
-			map.push_back(mapLine);
+			loadY++;
+
 		} else {
 			// instruction line
 			std::string_view insSv = line;
@@ -109,11 +175,58 @@ int main(int argc, char* argv[]) {
 	}
 
 
+	tiles[0].cubeFace = 'F';
+
+	std::set<char> setCubeFaces = { 'F' };
+
+	// add all the current links between tiles
+	for (auto& [xy, id] : tileXyToId) {
+		// check the directions,
+
+		if (tileXyToId.contains({xy.first + 1, xy.second})) {
+			auto neighbourId = tileXyToId[{xy.first + 1, xy.second}];
+
+			tiles[id].connectionMappings[0] = {
+				neighbourId,
+				0
+			};
+		}
+
+		if (tileXyToId.contains({ xy.first, xy.second + 1})) {
+			auto neighbourId = tileXyToId[{xy.first, xy.second + 1}];
+
+			tiles[id].connectionMappings[1] = {
+				neighbourId,
+				1
+			};
+		}
+
+		if (tileXyToId.contains({ xy.first - 1, xy.second })) {
+			auto neighbourId = tileXyToId[{xy.first - 1, xy.second}];
+
+			tiles[id].connectionMappings[2] = {
+				neighbourId,
+				2
+			};
+		}
+
+		if (tileXyToId.contains({ xy.first, xy.second - 1 })) {
+			auto neighbourId = tileXyToId[{xy.first, xy.second - 1}];
+
+			tiles[id].connectionMappings[3] = {
+				neighbourId,
+				3
+			};
+		}
+	}
+
+
 	int yPos = 0;
-	int xPos = std::find(map[0].begin(), map[0].end(), Cell::Empty) - map[0].begin();
+	int xPos = 0;
+	int tile = 0;
 	int facing = 0;
 
-	auto wrapPos = [&map](int xPos, int yPos, int deltaX, int deltaY) -> std::pair<int, int> {
+	/*auto wrapPos = [&map](int xPos, int yPos, int deltaX, int deltaY) -> std::pair<int, int> {
 		xPos += deltaX;
 		yPos += deltaY;
 
@@ -201,11 +314,13 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	auto passWord = (yPos + 1) * 1000 + (xPos + 1) * 4 + facing;
+	auto password = (yPos + 1) * 1000 + (xPos + 1) * 4 + facing;*/
+
+	auto password = 0;
 
 	auto end = std::chrono::high_resolution_clock::now();
 
-	fmt::print("Part 1: password {}\n", passWord);
+	fmt::print("Part 1: password {}\n", password);
 
 	auto dur = end - start;
 
