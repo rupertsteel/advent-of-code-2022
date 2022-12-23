@@ -48,61 +48,109 @@ using Instruction = std::variant<int, Direction>;
 struct ConnectionMapping {
 	int toTile;
 
-	int newFacingDirection;
+	int intoFacingDirection;
 };
 
 
-struct Point3d {
-	int x;
-	int y;
-	int z;
-};
-//
-//
-//
-//
-
-// Test map
-//   0
-// 123
-//   45
 
 
+//constexpr int tileSize = 4;
+constexpr int tileSize = 50;
 
-// My map:
-//  01
-//  2
-// 34
-// 5
+/*std::array<std::array<ConnectionMapping, 4>, 6> mappings{{
+	{{
+		{5, 0},
+		{3, 3},
+		{2, 3},
+		{1, 3},
+	}},
+	{{
+		{2, 2},
+		{4, 1},
+		{5, 1},
+		{0, 3},
+	}},
+	{{
+		{3, 2},
+		{4, 2},
+		{1, 0},
+		{0, 2}
+	}},
+	{{
+		{5, 3},
+		{4 ,3},
+		{2, 0},
+		{0, 1}
+	}},
+	{{
+		{5, 2},
+		{1, 1},
+		{2, 1},
+		{3, 1}
+	}},
+	{{
+		{0, 0},
+		{1, 2},
+		{4, 0},
+		{3, 0}
+	}}
+} };*/
 
-
-
-constexpr int tileSize = 4;
-//constexpr int tileSize = 50;
+std::array<std::array<ConnectionMapping, 4>, 6> mappings{ {
+	{{
+		{1, 2},
+		{2, 3},
+		{4, 1},
+		{5, 1}
+	}},
+	{{
+		{3, 0},
+		{2, 0},
+		{0, 0},
+		{5, 0}
+	}},
+	{{
+		{1, 1},
+		{3, 3},
+		{4, 2},
+		{0, 1}
+	}},
+	{{
+		{1, 0},
+		{5, 3},
+		{4, 3},
+		{2, 1}
+	}},
+	{{
+		{5, 2},
+		{0, 2},
+		{2, 2},
+		{3, 2}
+	}},
+	{{
+		{1, 3},
+		{0, 3},
+		{4, 0},
+		{3, 1}
+	}}
+} };
 
 struct Tile {
 	int originalX;
 	int originalY;
 
-	char cubeFace = ' ';
-
-	Point3d faceCenter; // {1, 0, 0} for front
-	Point3d cellOrigin; // {1, -1, 1} // for front
-
 	std::array<std::array<Cell, tileSize>, tileSize> cells;
 
 	std::array<std::array<std::optional<int>, tileSize>, tileSize> lastMovementDirection;
-
-	std::array<std::optional<ConnectionMapping>, 4> connectionMappings; // uses facing direction
 };
 
 
 void printGrid(const std::map<int, Tile>& tiles, const std::map<std::pair<int, int>, int>& tileXyMapping) {
-	constexpr int mapWidth = 4; // test
-	constexpr int mapHeight = 3; // test
+	//constexpr int mapWidth = 4; // test
+	//constexpr int mapHeight = 3; // test
 
-	//constexpr int mapWidth = 3;
-	//constexpr int mapHeight = 4;
+	constexpr int mapWidth = 3;
+	constexpr int mapHeight = 4;
 
 	std::string printStr;
 	printStr.reserve((mapWidth * tileSize + 1) * mapHeight * tileSize + 10);
@@ -146,7 +194,7 @@ void printGrid(const std::map<int, Tile>& tiles, const std::map<std::pair<int, i
 }
 
 int main(int argc, char* argv[]) try {
-	std::ifstream inputFile("inputs/day22-test.txt");
+	std::ifstream inputFile("inputs/day22.txt");
 	std::string input(std::istreambuf_iterator{ inputFile }, std::istreambuf_iterator<char>{});
 
 	auto start = std::chrono::high_resolution_clock::now();
@@ -155,8 +203,6 @@ int main(int argc, char* argv[]) try {
 
 
 	std::map<std::pair<int, int>, int> tileXyToId;
-	int tile0X = -1;
-	int tile0Y = -1;
 
 	std::map<int, Tile> tiles;
 
@@ -177,11 +223,6 @@ int main(int argc, char* argv[]) try {
 				int tileY = loadY / tileSize;
 
 				if (!tileXyToId.contains({tileX, tileY})) {
-					if (tileXyToId.empty()) {
-						tile0X = tileX;
-						tile0Y = tileY;
-					}
-
 					tileXyToId[{tileX, tileY}] = tileXyToId.size();
 				}
 
@@ -189,9 +230,6 @@ int main(int argc, char* argv[]) try {
 				if (!tiles.contains(tileId)) {
 					tiles[tileId].originalX = i;
 					tiles[tileId].originalY = loadY;
-
-					tiles[tileId].faceCenter = { 1, (tileX - tile0X) * 2, (tileY - tile0Y) * 2 };
-					tiles[tileId].cellOrigin = { 1, (tileX - tile0X) * 2 - 1, (tileY - tile0Y) * 2 + 1 };
 				}
 
 				auto inTileY = loadY - tiles[tileId].originalY;
@@ -245,52 +283,6 @@ int main(int argc, char* argv[]) try {
 	}
 
 
-	tiles[0].cubeFace = 'F';
-
-	std::set<char> setCubeFaces = { 'F' };
-
-	// add all the current links between tiles
-	for (auto& [xy, id] : tileXyToId) {
-		// check the directions
-
-		if (tileXyToId.contains({xy.first + 1, xy.second})) {
-			auto neighbourId = tileXyToId[{xy.first + 1, xy.second}];
-
-			tiles[id].connectionMappings[0] = {
-				neighbourId,
-				0
-			};
-		}
-
-		if (tileXyToId.contains({ xy.first, xy.second + 1})) {
-			auto neighbourId = tileXyToId[{xy.first, xy.second + 1}];
-
-			tiles[id].connectionMappings[1] = {
-				neighbourId,
-				1
-			};
-		}
-
-		if (tileXyToId.contains({ xy.first - 1, xy.second })) {
-			auto neighbourId = tileXyToId[{xy.first - 1, xy.second}];
-
-			tiles[id].connectionMappings[2] = {
-				neighbourId,
-				2
-			};
-		}
-
-		if (tileXyToId.contains({ xy.first, xy.second - 1 })) {
-			auto neighbourId = tileXyToId[{xy.first, xy.second - 1}];
-
-			tiles[id].connectionMappings[3] = {
-				neighbourId,
-				3
-			};
-		}
-	}
-
-
 	int yPos = 0;
 	int xPos = 0;
 	int tile = 0;
@@ -314,28 +306,83 @@ int main(int argc, char* argv[]) try {
 			return { tile, newXPos, newYPos, facing };
 		}
 
-		throw std::runtime_error("Not implemented");
+		//throw std::runtime_error("Not implemented");
 
-		// so the facing determines the z coord on the new face (z is x or way, maybe with a negative to make things wrap correctly)
 
-		auto nextTile = tiles[tile].connectionMappings[facing].value().toTile;
-		auto nextFacing = tiles[tile].connectionMappings[facing].value().newFacingDirection;
+		//auto nextTile = //tiles[tile].connectionMappings[facing].value().toTile;
+		auto nextTile = mappings[tile][facing].toTile;
+		//auto nextFacing = tiles[tile].connectionMappings[facing].value().newFacingDirection;
+		auto oppositeFacing = mappings[tile][facing].intoFacingDirection;
+
+		// get m from the current facing
+		int m;
+		if (facing == 0) {
+			m = yPos;
+		} else if (facing == 1) {
+			m = tileSize - xPos - 1;
+		} else if (facing == 2) {
+			m = tileSize - yPos - 1;
+		} else {
+			m = xPos;
+		}
 
 		int newX;
 		int newY;
-		
 
-		if (newXPos >= tileSize) {
-			// handle right edge
-		} else if (newYPos >= tileSize) {
-			// handle bottom edge
-		} else if (newXPos < 0) {
-			// handle left edge
+		if (oppositeFacing == 0) {
+			newX = tileSize - 1;
+		} else if (oppositeFacing == 1) {
+			newY = tileSize - 1;
+		} else if (oppositeFacing == 2) {
+			newX = 0;
 		} else {
-			// handle top edge
+			newY = 0;
 		}
 
-		return { 0, 0, 0, 0 };
+		bool xySet = false;
+
+		if ((facing == 0 && oppositeFacing == 2) || (facing == 2 && oppositeFacing == 0)) {
+			newY = yPos;
+			xySet = true;
+		} else if ((facing == 1 && oppositeFacing == 3) || (facing == 3 && oppositeFacing == 1)) {
+			newX = xPos;
+			xySet = true;
+		}
+
+		if (facing == 0 && oppositeFacing == 3 || facing == 2 && oppositeFacing == 1) {
+			newX = (tileSize - yPos - 1);
+			xySet = true;
+		}
+		if (facing == 1 && oppositeFacing == 0 || facing == 3 && oppositeFacing == 2) {
+			newY = xPos;
+			xySet = true;
+		}
+
+		if (facing == 0 && oppositeFacing == 0 || facing == 2 && oppositeFacing == 2) {
+			newY = (tileSize - yPos - 1);
+			xySet = true;
+		}
+		if (facing == 1 && oppositeFacing == 1 || facing == 3 && oppositeFacing == 3) {
+			newX = (tileSize - xPos - 1);
+			xySet = true;
+		}
+
+		if (facing == 0 && oppositeFacing == 1 || facing == 2 && oppositeFacing == 3) {
+			newX = yPos;
+			xySet = true;
+		}
+		if (facing == 1 && oppositeFacing == 2 || facing == 3 && oppositeFacing == 0) {
+			newY = (tileSize - xPos - 1);
+			xySet = true;
+		}
+
+		if (!xySet) {
+			throw std::runtime_error("not implemented");
+		}
+
+		int newFacing = (oppositeFacing + 2) % 4;
+		
+		return { nextTile, newX, newY, newFacing };
 	};
 
 	auto cellFree = [&tiles](int tile, int xPos, int yPos) -> bool {
@@ -366,7 +413,7 @@ int main(int argc, char* argv[]) try {
 				for (int i = 0; i < dist; i++) {
 					auto [nextTile, nextX, nextY, nextFacing] = wrapPos(tile, xPos, yPos, facing);
 
-					if (!cellFree(tile, nextX, nextY)) {
+					if (!cellFree(nextTile, nextX, nextY)) {
 						break;
 					}
 
@@ -378,9 +425,9 @@ int main(int argc, char* argv[]) try {
 					tiles[tile].lastMovementDirection[yPos][xPos] = facing;
 				}
 
-				printGrid(tiles, tileXyToId);
+				//printGrid(tiles, tileXyToId);
 			} catch (std::exception& e) {
-				printGrid(tiles, tileXyToId);
+				//printGrid(tiles, tileXyToId);
 
 				throw;
 			}
