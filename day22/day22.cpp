@@ -52,6 +52,16 @@ struct ConnectionMapping {
 };
 
 
+struct Point3d {
+	int x;
+	int y;
+	int z;
+};
+//
+//
+//
+//
+
 // Test map
 //   0
 // 123
@@ -68,13 +78,16 @@ struct ConnectionMapping {
 
 
 constexpr int tileSize = 4;
-// constexpr int tileSize = 50;
+//constexpr int tileSize = 50;
 
 struct Tile {
 	int originalX;
 	int originalY;
 
 	char cubeFace = ' ';
+
+	Point3d faceCenter; // {1, 0, 0} for front
+	Point3d cellOrigin; // {1, -1, 1} // for front
 
 	std::array<std::array<Cell, tileSize>, tileSize> cells;
 
@@ -88,8 +101,8 @@ void printGrid(const std::map<int, Tile>& tiles, const std::map<std::pair<int, i
 	constexpr int mapWidth = 4; // test
 	constexpr int mapHeight = 3; // test
 
-	// constexpr int mapWidth = 3;
-	// constexpr int mapHeight = 5;
+	//constexpr int mapWidth = 3;
+	//constexpr int mapHeight = 4;
 
 	std::string printStr;
 	printStr.reserve((mapWidth * tileSize + 1) * mapHeight * tileSize + 10);
@@ -140,9 +153,10 @@ int main(int argc, char* argv[]) try {
 
 	auto inputIntoLines = std::string_view{ input } | std::views::split("\n"sv) | std::views::transform([](auto rng) { return std::string(rng.begin(), rng.end()); }) | std::views::filter([](auto str) { return !str.empty(); });
 
-	std::vector<std::vector<Cell>> map;
 
 	std::map<std::pair<int, int>, int> tileXyToId;
+	int tile0X = -1;
+	int tile0Y = -1;
 
 	std::map<int, Tile> tiles;
 
@@ -163,6 +177,11 @@ int main(int argc, char* argv[]) try {
 				int tileY = loadY / tileSize;
 
 				if (!tileXyToId.contains({tileX, tileY})) {
+					if (tileXyToId.empty()) {
+						tile0X = tileX;
+						tile0Y = tileY;
+					}
+
 					tileXyToId[{tileX, tileY}] = tileXyToId.size();
 				}
 
@@ -170,6 +189,9 @@ int main(int argc, char* argv[]) try {
 				if (!tiles.contains(tileId)) {
 					tiles[tileId].originalX = i;
 					tiles[tileId].originalY = loadY;
+
+					tiles[tileId].faceCenter = { 1, (tileX - tile0X) * 2, (tileY - tile0Y) * 2 };
+					tiles[tileId].cellOrigin = { 1, (tileX - tile0X) * 2 - 1, (tileY - tile0Y) * 2 + 1 };
 				}
 
 				auto inTileY = loadY - tiles[tileId].originalY;
@@ -229,7 +251,7 @@ int main(int argc, char* argv[]) try {
 
 	// add all the current links between tiles
 	for (auto& [xy, id] : tileXyToId) {
-		// check the directions,
+		// check the directions
 
 		if (tileXyToId.contains({xy.first + 1, xy.second})) {
 			auto neighbourId = tileXyToId[{xy.first + 1, xy.second}];
@@ -292,6 +314,8 @@ int main(int argc, char* argv[]) try {
 			return { tile, newXPos, newYPos, facing };
 		}
 
+		throw std::runtime_error("Not implemented");
+
 		// so the facing determines the z coord on the new face (z is x or way, maybe with a negative to make things wrap correctly)
 
 		auto nextTile = tiles[tile].connectionMappings[facing].value().toTile;
@@ -299,8 +323,6 @@ int main(int argc, char* argv[]) try {
 
 		int newX;
 		int newY;
-
-		throw std::runtime_error("Not implemented");
 		
 
 		if (newXPos >= tileSize) {
