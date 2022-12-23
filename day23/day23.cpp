@@ -123,11 +123,15 @@ int main(int argc, char* argv[]) try {
 
 	printBoard(elfPositions, -3, 10, -2, 9);
 
-	for (int i = 0; i < 10; i++) {
+	
+	int round = 0;
+
+	while(true) {
+		bool elfMoved = false;
 		std::map<Point, int> proposials;
 
 		for (auto& elf : elfPositions) {
-			auto elfProposedPosition = proposePosition(elfPositions, elf, i);
+			auto elfProposedPosition = proposePosition(elfPositions, elf, round);
 
 			if (elfProposedPosition) {
 				proposials[*elfProposedPosition]++;
@@ -137,10 +141,11 @@ int main(int argc, char* argv[]) try {
 		std::set<Point> newPositions;
 
 		for (auto& elf : elfPositions) {
-			auto elfProposedPosition = proposePosition(elfPositions, elf, i);
+			auto elfProposedPosition = proposePosition(elfPositions, elf, round);
 
 			if (elfProposedPosition && proposials[*elfProposedPosition] == 1) {
 				newPositions.insert(*elfProposedPosition);
+				elfMoved = true;
 			} else {
 				newPositions.insert(elf);
 			}
@@ -148,8 +153,17 @@ int main(int argc, char* argv[]) try {
 
 		elfPositions = newPositions;
 
-		fmt::print("== End of Round {} ==\n", i + 1);
-		printBoard(elfPositions, -3, 10, -2, 9);
+		
+
+		fmt::print("== End of Round {} ==\n", round + 1);
+		//printBoard(elfPositions, -3, 10, -2, 9);
+
+		if (elfMoved == false) {
+			fmt::print("No elves moved\n");
+			break;
+		}
+
+		round++;
 	}
 
 	int boundingBoxMinX = std::numeric_limits<int>::max();
