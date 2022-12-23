@@ -128,6 +128,7 @@ int main(int argc, char* argv[]) try {
 
 	while(true) {
 		bool elfMoved = false;
+		int numElvesMoved = 0;
 		std::map<Point, int> proposials;
 
 		for (auto& elf : elfPositions) {
@@ -146,6 +147,7 @@ int main(int argc, char* argv[]) try {
 			if (elfProposedPosition && proposials[*elfProposedPosition] == 1) {
 				newPositions.insert(*elfProposedPosition);
 				elfMoved = true;
+				numElvesMoved++;
 			} else {
 				newPositions.insert(elf);
 			}
@@ -155,7 +157,7 @@ int main(int argc, char* argv[]) try {
 
 		
 
-		fmt::print("== End of Round {} ==\n", round + 1);
+		fmt::print("== End of Round {:3} == {:4} elves moved\n", round + 1, numElvesMoved);
 		//printBoard(elfPositions, -3, 10, -2, 9);
 
 		if (elfMoved == false) {
