@@ -73,6 +73,9 @@ struct Map {
 	int blizzardTime = 0;
 
 	std::map<int, std::set<Point>> blizzardPointsAtTime;
+
+	int distStartToEnd;
+
 	Cell getCell(const Point& point) const {
 		auto i = (point.y * width) + point.x;
 		return cells[i];
@@ -119,6 +122,9 @@ struct Path {
 	Point currentPos;
 	int estEndTime;
 
+	bool reachedEndFirst;
+	bool reachedStartAgain;
+
 	std::vector<Point> positions;
 
 	std::strong_ordering operator<=>(const Path& r) const {
@@ -132,13 +138,25 @@ struct Path {
 			return c2;
 		}
 
-		return estEndTime <=> r.estEndTime;
+		auto c3 = estEndTime <=> r.estEndTime;
+		if (c3 != std::strong_ordering::equal) {
+			return c3;
+		}
+
+		auto c4 = reachedEndFirst <=> r.reachedEndFirst;
+		if (c4 != std::strong_ordering::equal) {
+			return c4;
+		}
+
+		return reachedStartAgain <=> r.reachedStartAgain;
 	}
 
 	bool operator==(const Path& r) const {
 		return currentTime == r.currentTime
 			&& currentPos == r.currentPos
-			&& estEndTime == r.estEndTime;
+			&& estEndTime == r.estEndTime
+			&& reachedEndFirst == r.reachedEndFirst
+			&& reachedStartAgain == r.reachedStartAgain;
 	}
 
 	//std::strong_ordering operator<=>(const Path&) const = default;
@@ -242,10 +260,12 @@ int main(int argc, char* argv[]) try {
 	}
 	map.height = lineNum;
 
+	map.distStartToEnd = manhattenDistance(map.start, map.dest);
+
 	std::map<int, std::set<Path>> processingPaths;
 
 	auto initialPathEstDistance = manhattenDistance(map.start, map.dest);
-	processingPaths[initialPathEstDistance].emplace(0, map.start, initialPathEstDistance, std::vector{map.start});
+	processingPaths[initialPathEstDistance].emplace(0, map.start, initialPathEstDistance, false, false, std::vector{map.start});
 
 	Path fastestPath;
 
@@ -259,7 +279,16 @@ int main(int argc, char* argv[]) try {
 		processingPaths.erase(currentBestPathsIt);
 
 		for (const auto& path : paths) {
-			if (path.currentPos == map.dest) {
+			bool switchToStart = false;
+			if (path.currentPos == map.dest && !path.reachedEndFirst) {
+				switchToStart = true;
+			}
+			bool switchToEnd = false;
+			if (path.currentPos == map.start && path.reachedEndFirst && !path.reachedStartAgain) {
+				switchToEnd = true;
+			}
+
+			if (path.currentPos == map.dest && path.reachedEndFirst && path.reachedStartAgain) {
 				fmt::print("Found path at dest, time {}\n", path.currentTime);
 				running = false;
 				fastestPath = path;
@@ -270,7 +299,7 @@ int main(int argc, char* argv[]) try {
 			}
 
 			auto tryAddPath = [&](int dx, int dy) {
-				auto newPath = Path{ path.currentTime + 1, Point{path.currentPos.x + dx, path.currentPos.y + dy}, 0 , path.positions};
+				auto newPath = Path{ path.currentTime + 1, Point{path.currentPos.x + dx, path.currentPos.y + dy}, 0 , path.reachedEndFirst, path.reachedStartAgain, path.positions};
 
 				if (newPath.currentPos.x < 0 || newPath.currentPos.y < 0 || newPath.currentPos.x >= map.width || newPath.currentPos.y >= map.height) {
 					return;
@@ -278,7 +307,22 @@ int main(int argc, char* argv[]) try {
 				if (map.getCell(newPath.currentPos) == Cell::Wall) {
 					return;
 				}
-				newPath.estEndTime = newPath.currentTime + manhattenDistance(newPath.currentPos, map.dest);
+
+				if (switchToStart) {
+					newPath.reachedEndFirst = true;
+				}
+				if (switchToEnd) {
+					newPath.reachedStartAgain = true;
+				}
+
+				if (!newPath.reachedEndFirst) {
+					newPath.estEndTime = newPath.currentTime + manhattenDistance(newPath.currentPos, map.dest);
+				} else if (!newPath.reachedStartAgain) {
+					newPath.estEndTime = newPath.currentTime + manhattenDistance(newPath.currentPos, map.start);
+				} else {
+					newPath.estEndTime = newPath.currentTime + manhattenDistance(newPath.currentPos, map.dest);
+				}
+
 				newPath.positions.push_back(newPath.currentPos);
 
 				processingPaths[newPath.estEndTime].insert(newPath);
@@ -297,6 +341,7 @@ int main(int argc, char* argv[]) try {
 	for (int i = 0; i <= fastestPath.currentTime; i++) {
 		fmt::print("Minute {}\n", i);
 		printBoard(map, map.blizzardPointsAtTime.at(i), fastestPath.positions.at(i));
+		std::this_thread::sleep_for(std::chrono::milliseconds(16));
 	}
 
 	auto dur = end - start;
