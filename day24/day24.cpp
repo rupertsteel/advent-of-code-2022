@@ -269,9 +269,16 @@ int main(int argc, char* argv[]) try {
 
 	Path fastestPath;
 
+	int currentPointInTime = -1;
+	int maxPointInTime = 0;
+
 	bool running = true;
 	while (running) {
-		map.addNextStep();
+		if (currentPointInTime < maxPointInTime) {
+
+			map.addNextStep();
+			currentPointInTime = maxPointInTime;
+		}
 
 		auto currentBestPathsIt = processingPaths.lower_bound(0);
 
@@ -307,6 +314,8 @@ int main(int argc, char* argv[]) try {
 				if (map.getCell(newPath.currentPos) == Cell::Wall) {
 					return;
 				}
+
+				maxPointInTime = std::max(maxPointInTime, newPath.currentTime);
 
 				if (switchToStart) {
 					newPath.reachedEndFirst = true;
