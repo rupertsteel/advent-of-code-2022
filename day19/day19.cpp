@@ -99,6 +99,10 @@ int main(int argc, char* argv[]) {
 #endif
 		std::stack<Solution> solutions;
 
+		int maxOreNeeded = std::max({ blueprint.oreRobotOreCost, blueprint.clayRobotOreCost, blueprint.obsidianRobotOreCost, blueprint.geodeRobotOreCost });
+		int maxClayNeeded = blueprint.obsidianRobotClayCost;
+		int maxObsidianNeeded = blueprint.geodeRobotObsidianCost;
+
 		for (int i = 0; i < 4; i++) {
 			Solution start{
 				1, 1, 0, 0, 0, 0, 0, 0, 0, i
@@ -109,46 +113,26 @@ int main(int argc, char* argv[]) {
 
 		int bestScore = 0;
 
-
-		size_t iter = 0;
-
 		while (!solutions.empty()) {
 			auto baseSolution = solutions.top();
 			solutions.pop();
 
-			auto printProgress = [&]() {
-				std::vector<int> minuteNums;
-
-				for (auto& sol : solutions._Get_container()) {
-					minuteNums.push_back(sol.minute);
-				}
-
-				fmt::print("Progress: {}\n", minuteNums);
-			};
-
 			// work out what robots can be made
-			bool canOreMinerBeMade = baseSolution.amountOre >= blueprint.oreRobotOreCost;
-			bool canClayMinerBeMade = baseSolution.amountOre >= blueprint.clayRobotOreCost;
-			bool canObsidianMinerBeMade = baseSolution.amountOre >= blueprint.obsidianRobotOreCost && baseSolution.amountClay >= blueprint.obsidianRobotClayCost;
+			bool canOreMinerBeMade = baseSolution.amountOre >= blueprint.oreRobotOreCost && baseSolution.numOreMiners < maxOreNeeded;
+			bool canClayMinerBeMade = baseSolution.amountOre >= blueprint.clayRobotOreCost && baseSolution.numClayMiners < maxClayNeeded;
+			bool canObsidianMinerBeMade = baseSolution.amountOre >= blueprint.obsidianRobotOreCost && baseSolution.amountClay >= blueprint.obsidianRobotClayCost && baseSolution.numObsidianMiners < maxObsidianNeeded;
 			bool canGeodeMinerBeMade = baseSolution.amountOre >= blueprint.geodeRobotOreCost && baseSolution.amountObsidian >= blueprint.geodeRobotObsidianCost;
 
-			// if we can make any robot, then force a robot to be made, as delaying will always be sub-optional
-			bool mustMakeRobot = canOreMinerBeMade && canClayMinerBeMade && canObsidianMinerBeMade && canGeodeMinerBeMade;
 
 			baseSolution.amountOre += baseSolution.numOreMiners;
 			baseSolution.amountClay += baseSolution.numClayMiners;
 			baseSolution.amountObsidian += baseSolution.numObsidianMiners;
 			baseSolution.amountGeode += baseSolution.numGeodeMiners;
 
-			iter++;
-
 			if (baseSolution.minute == stopTime) {
 				// we are done here
 				bestScore = std::max(bestScore, baseSolution.amountGeode);
 
-				if ((iter & 0xFFFFFFF) == 0) {
-					printProgress();
-				}
 
 				continue;
 			}
@@ -191,10 +175,6 @@ int main(int argc, char* argv[]) {
 				}
 			} else {
 				solutions.push(baseSolution);
-			}
-
-			if ((iter & 0xFFFFFFF) == 0) {
-				printProgress();
 			}
 		}
 
