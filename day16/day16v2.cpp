@@ -35,9 +35,19 @@ using namespace std::string_literals;
 // constexpr int numRounds = 30; // part 1
 constexpr int numRounds = 26; // part 2
 
+struct NodeLink {
+	int nextNode;
+	int weight;
+};
+
+struct NodeNameLink {
+	std::string nextNodeName;
+	int weight;
+};
+
 struct Node {
 	int flow_rate;
-	std::vector<int> nextNodes;
+	std::vector<NodeLink> nextNodes;
 };
 
 struct SolutionData {
@@ -68,7 +78,7 @@ struct Move {
 struct Map {
 	std::vector<Node> graph;
 	std::map<std::string, int> nameToId;
-	std::map<std::string, std::vector<std::string>> nextNodesMap;
+	std::map<std::string, std::vector<NodeNameLink>> nextNodesMap;
 	std::uint64_t valvesToOpen = 0;
 };
 
@@ -97,7 +107,7 @@ Map readMap(std::filesystem::path filePath) {
 		auto flowRate = std::stoi(results[2].str());
 		auto nextNodesStr = results[3].str();
 
-		auto nextNodes = nextNodesStr | std::views::split(", "s) | std::views::transform([](auto rng) { return std::string(rng.begin(), rng.end()); }) | std::ranges::to<std::vector>();
+		auto nextNodes = nextNodesStr | std::views::split(", "s) | std::views::transform([](auto rng) { return NodeNameLink{ std::string(rng.begin(), rng.end()), 1 }; }) | std::ranges::to<std::vector>();
 		m.nextNodesMap.emplace(nodeName, nextNodes);
 
 		m.nameToId.emplace(nodeName, m.graph.size());
@@ -106,6 +116,14 @@ Map readMap(std::filesystem::path filePath) {
 			m.valvesToOpen |= (1ull << m.graph.size());
 		}
 		m.graph.emplace_back(Node{ flowRate, {} });
+	}
+
+	for (auto& elem : m.nextNodesMap) {
+		auto& src = m.graph[m.nameToId[elem.first]];
+
+		for (auto& target : elem.second) {
+			src.nextNodes.emplace_back(m.nameToId[target.nextNodeName], target.weight);
+		}
 	}
 
 	return m;
@@ -124,7 +142,7 @@ std::string mapToGraphviz(const Map& map) {
 
 	for (auto& [nodeName, linkedNodes]: map.nextNodesMap) {
 		for (auto& nextNode : linkedNodes) {
-			returnStr += fmt::format("    {} -> {};\n", nodeName, nextNode);
+			returnStr += fmt::format("    {} -> {} [label=\"weight={}\"];\n", nodeName, nextNode.nextNodeName, nextNode.weight);
 		}
 	}
 
