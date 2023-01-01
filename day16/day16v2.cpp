@@ -253,23 +253,90 @@ SimpleMap simplifyMapRemoveNodesCantAccessInTime(const SimpleMap& input, int max
 		}
 	}
 
+	std::set<std::string> linksToRemove;
+
 	for (auto& [nodeName, nodeAccessTime] : nodeAccessTimes) {
 		if (nodeAccessTime >= maxTime) {
 			fmt::print("Node removed {}, access time {}\n", nodeName, nodeAccessTime);
 			newMap.nextNodesMap.erase(nodeName);
 			newMap.flowRates.erase(nodeName);
+			linksToRemove.emplace(nodeName);
+		}
+	}
+
+	for (auto& [_, links] : newMap.nextNodesMap) {
+		std::erase_if(links, [&](auto& link) {
+			return linksToRemove.contains(link.nextNodeName);
+		});
+	}
+
+	return newMap;
+}
+
+SimpleMap removeUnreachableNodes(const SimpleMap& input) {
+	SimpleMap newMap = input;
+
+	std::set<std::string> reachableNodes;
+	std::stack<std::string> nodesToCheck;
+	nodesToCheck.emplace("AA");
+
+	while (!nodesToCheck.empty()) {
+		auto toCheck = nodesToCheck.top();
+		nodesToCheck.pop();
+
+		if (!reachableNodes.contains(toCheck)) {
+			reachableNodes.emplace(toCheck);
+
+			for (auto& nextNodes : input.nextNodesMap.at(toCheck)) {
+				nodesToCheck.push(nextNodes.nextNodeName);
+			}
+		}
+	}
+
+	std::set<std::string> nodesToRemove;
+	for (auto& node : input.flowRates) {
+		if (!reachableNodes.contains(node.first)) {
+			newMap.flowRates.erase(node.first);
+			newMap.nextNodesMap.erase(node.first);
 		}
 	}
 
 	return newMap;
 }
 
+void printMapStats(const SimpleMap& map) {
+	auto numNodes = map.flowRates.size();
+
+	auto numLinks = std::transform_reduce(map.nextNodesMap.begin(), map.nextNodesMap.end(), 0ull, std::plus<>{}, [](const auto& vec) {
+		return vec.second.size();
+	});
+
+	fmt::print("Num nodes {} num links {}\n", numNodes, numLinks);
+}
+
 SimpleMap simplifyMap(const SimpleMap& input, int maxTime) {
+	printMapStats(input);
 	auto m1 = simplifyMapJoinNodesAndRenumber(input, maxTime);
+
+	printMapStats(m1);
 
 	auto m2 = simplifyMapRemoveNodesCantAccessInTime(m1, maxTime);
 
-	return m2;
+	printMapStats(m2);
+
+	size_t nodesBefore;
+	SimpleMap m3 = m2;
+
+	do {
+		nodesBefore = m3.flowRates.size();
+
+		m3 = removeUnreachableNodes(m3);
+		
+	} while (nodesBefore > m3.flowRates.size());
+
+	printMapStats(m3);
+
+	return m3;
 }
 
 AlgorithmMap toAlgorithmMap(const SimpleMap& input) {
