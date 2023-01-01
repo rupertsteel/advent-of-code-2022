@@ -17,6 +17,7 @@
 #include <thread>
 #include <filesystem>
 #include <stack>
+#include <queue>
 
 #include <fmt/ranges.h>
 #include <fmt/chrono.h>
@@ -76,15 +77,20 @@ struct Move {
 	int move;
 };
 
-struct Map {
+struct SimpleMap {
+	std::map<std::string, std::vector<NodeNameLink>> nextNodesMap;
+	std::map<std::string, int> flowRates;
+};
+
+struct AlgorithmMap {
 	std::vector<Node> graph;
 	std::map<std::string, int> nameToId;
-	std::map<std::string, std::vector<NodeNameLink>> nextNodesMap;
+	
 	std::uint64_t valvesToOpen = 0;
 };
 
-Map readMap(std::filesystem::path filePath) {
-	Map m;
+SimpleMap readMap(std::filesystem::path filePath) {
+	SimpleMap m;
 
 	std::ifstream inputFile(filePath);
 
@@ -111,32 +117,18 @@ Map readMap(std::filesystem::path filePath) {
 		auto nextNodes = nextNodesStr | std::views::split(", "s) | std::views::transform([](auto rng) { return NodeNameLink{ std::string(rng.begin(), rng.end()), 1 }; }) | std::ranges::to<std::vector>();
 		m.nextNodesMap.emplace(nodeName, nextNodes);
 
-		m.nameToId.emplace(nodeName, m.graph.size());
-
-		if (flowRate != 0) {
-			m.valvesToOpen |= (1ull << m.graph.size());
-		}
-		m.graph.emplace_back(Node{ flowRate, {} });
-	}
-
-	for (auto& elem : m.nextNodesMap) {
-		auto& src = m.graph[m.nameToId[elem.first]];
-
-		for (auto& target : elem.second) {
-			src.nextNodes.emplace_back(m.nameToId[target.nextNodeName], target.weight);
-		}
+		m.flowRates.emplace(nodeName, flowRate);
 	}
 
 	return m;
 }
 
-std::string mapToGraphviz(const Map& map) {
+std::string mapToGraphviz(const SimpleMap& map) {
 	std::string returnStr = "digraph G {\n";
 
-	for (auto& [nodeName, nodeId] : map.nameToId) {
-		auto& node = map.graph[nodeId];
+	for (auto& [nodeName, flowRate] : map.flowRates) {
 
-		returnStr += fmt::format("    {} [{}];\n", nodeName, node.flow_rate > 0 ? "style=filled, color=lightgrey" : "");
+		returnStr += fmt::format("    {} [{}];\n", nodeName, flowRate > 0 ? "style=filled, color=lightgrey" : "");
 	}
 
 	returnStr += "\n\n";
@@ -152,7 +144,7 @@ std::string mapToGraphviz(const Map& map) {
 	return returnStr;
 }
 
-Map simplifyMap(const Map& input, int maxTime) {
+SimpleMap simplifyMapJoinNodesAndRenumber(const SimpleMap& input, int maxTime) {
 	// use direct links
 	// sort node ids by score
 
@@ -161,10 +153,8 @@ Map simplifyMap(const Map& input, int maxTime) {
 
 	sourceIds.insert("AA");
 
-	for (auto& [name, id] : input.nameToId) {
-		auto& node = input.graph[id];
-
-		if (node.flow_rate > 0) {
+	for (auto& [name, flowRate] : input.flowRates) {
+		if (flowRate > 0) {
 			sourceIds.insert(name);
 			destIds.insert(name);
 		}
@@ -217,38 +207,100 @@ Map simplifyMap(const Map& input, int maxTime) {
 		graphNewNodeLinks[src] = newLinks;
 	}
 
-	std::multimap<int, std::string, std::greater<>> valveWeights;
-	for (auto& [nodeName, nodeId] : input.nameToId) {
-		if (input.graph[nodeId].flow_rate > 0) {
-			valveWeights.emplace(input.graph[nodeId].flow_rate, nodeName);
-		}
-	}
-
-	Map simplifiedMap;
+	SimpleMap simplifiedMap;
 
 	simplifiedMap.nextNodesMap = graphNewNodeLinks;
 
-	for (auto& [nodeWeight, nodeName] : valveWeights) {
-		simplifiedMap.nameToId.emplace(nodeName, simplifiedMap.graph.size());
-
-		simplifiedMap.graph.emplace_back(Node{ nodeWeight, {} });
-	}
-
-	if (!simplifiedMap.nameToId.contains("AA")) {
-		simplifiedMap.nameToId.emplace("AA", simplifiedMap.graph.size());
-
-		simplifiedMap.graph.emplace_back(Node{ 0, {} });
-	}
-
-	for (auto& elem : simplifiedMap.nextNodesMap) {
-		auto& src = simplifiedMap.graph[simplifiedMap.nameToId[elem.first]];
-
-		for (auto& target : elem.second) {
-			src.nextNodes.emplace_back(simplifiedMap.nameToId[target.nextNodeName], target.weight);
-		}
+	for (auto node : sourceIds) {
+		simplifiedMap.flowRates.emplace(node, input.flowRates.at(node));
 	}
 
 	return simplifiedMap;
+}
+
+SimpleMap simplifyMapRemoveNodesCantAccessInTime(const SimpleMap& input, int maxTime) {
+	SimpleMap newMap = input;
+
+	std::map<std::string, int> nodeAccessTimes;
+	std::queue<std::tuple<std::string, std::string, int>> nodesToProcess;
+
+	nodeAccessTimes.emplace("AA", 0);
+
+	for (auto& next : input.nextNodesMap.at("AA")) {
+		nodesToProcess.emplace("AA", next.nextNodeName, next.weight);
+	}
+
+	while (!nodesToProcess.empty()) {
+		auto next = nodesToProcess.front();
+		nodesToProcess.pop();
+
+		auto newTime = nodeAccessTimes[std::get<0>(next)] + std::get<2>(next);
+
+		bool timeUpdated = false;
+
+		if (!nodeAccessTimes.contains(std::get<1>(next))) {
+			nodeAccessTimes.emplace(std::get<1>(next), newTime);
+			timeUpdated = true;
+		} else if (newTime < nodeAccessTimes[std::get<1>(next)]) {
+			nodeAccessTimes.emplace(std::get<1>(next), newTime);
+			timeUpdated = true;
+		}
+
+		if (timeUpdated) {
+			for (auto& nextLinks : input.nextNodesMap.at(std::get<1>(next))) {
+				nodesToProcess.emplace(std::get<1>(next), nextLinks.nextNodeName, nextLinks.weight);
+			}
+		}
+	}
+
+	for (auto& [nodeName, nodeAccessTime] : nodeAccessTimes) {
+		if (nodeAccessTime >= maxTime) {
+			fmt::print("Node removed {}, access time {}\n", nodeName, nodeAccessTime);
+			newMap.nextNodesMap.erase(nodeName);
+			newMap.flowRates.erase(nodeName);
+		}
+	}
+
+	return newMap;
+}
+
+SimpleMap simplifyMap(const SimpleMap& input, int maxTime) {
+	auto m1 = simplifyMapJoinNodesAndRenumber(input, maxTime);
+
+	auto m2 = simplifyMapRemoveNodesCantAccessInTime(m1, maxTime);
+
+	return m2;
+}
+
+AlgorithmMap toAlgorithmMap(const SimpleMap& input) {
+	AlgorithmMap algorithmMap;
+
+	std::multimap<int, std::string, std::greater<>> valveWeights;
+	for (auto& [nodeName, nodeFlowRate] : input.flowRates) {
+		valveWeights.emplace(nodeFlowRate, nodeName);
+	}
+
+	for (auto& [nodeWeight, nodeName] : valveWeights) {
+		algorithmMap.nameToId.emplace(nodeName, algorithmMap.graph.size());
+
+		algorithmMap.graph.emplace_back(Node{ nodeWeight, {} });
+	}
+
+	if (!algorithmMap.nameToId.contains("AA")) {
+		algorithmMap.nameToId.emplace("AA", algorithmMap.graph.size());
+
+		algorithmMap.graph.emplace_back(Node{ 0, {} });
+	}
+
+	for (auto& elem : input.nextNodesMap) {
+		auto& src = algorithmMap.graph[algorithmMap.nameToId[elem.first]];
+
+		for (auto& target : elem.second) {
+			src.nextNodes.emplace_back(algorithmMap.nameToId[target.nextNodeName], target.weight);
+		}
+	}
+
+	return algorithmMap;
 }
 
 int main(int argc, char* argv[]) {
@@ -264,13 +316,15 @@ int main(int argc, char* argv[]) {
 
 	auto map = readMap(mapPath);
 
-	fmt::print("Map has {} nodes\n", map.graph.size());
+	fmt::print("Map has {} nodes\n", map.nextNodesMap.size());
 
 	fmt::print("{}\n", mapToGraphviz(map));
 
 	auto simplifiedMap = simplifyMap(map, numRounds);
 
 	fmt::print("{}\n", mapToGraphviz(simplifiedMap));
+
+	auto algorithmMap = toAlgorithmMap(simplifiedMap);
 
 	auto end = std::chrono::high_resolution_clock::now();
 
