@@ -111,6 +111,28 @@ Map readMap(std::filesystem::path filePath) {
 	return m;
 }
 
+std::string mapToGraphviz(const Map& map) {
+	std::string returnStr = "digraph G {\n";
+
+	for (auto& [nodeName, nodeId] : map.nameToId) {
+		auto& node = map.graph[nodeId];
+
+		returnStr += fmt::format("    {} [{}];\n", nodeName, node.flow_rate > 0 ? "style=filled, color=lightgrey" : "");
+	}
+
+	returnStr += "\n\n";
+
+	for (auto& [nodeName, linkedNodes]: map.nextNodesMap) {
+		for (auto& nextNode : linkedNodes) {
+			returnStr += fmt::format("    {} -> {};\n", nodeName, nextNode);
+		}
+	}
+
+	returnStr += "}\n";
+
+	return returnStr;
+}
+
 int main(int argc, char* argv[]) {
 
 	std::filesystem::path mapPath;
@@ -125,6 +147,8 @@ int main(int argc, char* argv[]) {
 	auto map = readMap(mapPath);
 
 	fmt::print("Map has {} nodes\n", map.graph.size());
+
+	fmt::print("{}\n", mapToGraphviz(map));
 
 	auto end = std::chrono::high_resolution_clock::now();
 
