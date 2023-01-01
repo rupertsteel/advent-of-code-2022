@@ -152,7 +152,7 @@ std::string mapToGraphviz(const Map& map) {
 	return returnStr;
 }
 
-Map simplifyMap(const Map& input) {
+Map simplifyMap(const Map& input, int maxTime) {
 	// use direct links
 	// sort node ids by score
 
@@ -198,6 +198,14 @@ Map simplifyMap(const Map& input) {
 
 			if (destIds.contains(nextNode.first)) {
 				// save the distance
+				if (nextNode.second >= maxTime) {
+					// For big inputs only:
+					// this link means we would spend our entire time traveling along this, so we can't actually move here,
+					// so skip
+					// note, if a input has time = maxTime, we also can't do anything, as we need a turn to change the valve
+					continue;
+				}
+
 				newLinks.emplace_back(NodeNameLink{ nextNode.first, nextNode.second });
 			} else {
 				for (auto links : input.nextNodesMap.at(nextNode.first)) {
@@ -260,7 +268,7 @@ int main(int argc, char* argv[]) {
 
 	fmt::print("{}\n", mapToGraphviz(map));
 
-	auto simplifiedMap = simplifyMap(map);
+	auto simplifiedMap = simplifyMap(map, numRounds);
 
 	fmt::print("{}\n", mapToGraphviz(simplifiedMap));
 
