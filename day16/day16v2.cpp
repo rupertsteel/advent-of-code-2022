@@ -16,6 +16,7 @@
 #include <variant>
 #include <thread>
 #include <filesystem>
+#include <stack>
 
 #include <fmt/ranges.h>
 #include <fmt/chrono.h>
@@ -151,6 +152,97 @@ std::string mapToGraphviz(const Map& map) {
 	return returnStr;
 }
 
+Map simplifyMap(const Map& input) {
+	// use direct links
+	// sort node ids by score
+
+	std::set<std::string> sourceIds;
+	std::set<std::string> destIds;
+
+	sourceIds.insert("AA");
+
+	for (auto& [name, id] : input.nameToId) {
+		auto& node = input.graph[id];
+
+		if (node.flow_rate > 0) {
+			sourceIds.insert(name);
+			destIds.insert(name);
+		}
+	}
+
+	// from every source id, we breadth first search, tracking the depth, when we reach a dest id, we stop and record the distance
+	// note, this means that going A -> B -> C can be faster than A -> C, we only track direct distance
+
+	std::map<std::string, std::vector<NodeNameLink>> graphNewNodeLinks;
+
+	for (auto src : sourceIds) {
+		std::map<std::string, int> nodeToDist;
+		std::stack<std::pair<std::string, int>> nodesToProcess;
+
+		std::vector<NodeNameLink> newLinks;
+
+		nodeToDist[src] = 0;
+		for (auto srcNext : input.nextNodesMap.at(src)) {
+			nodesToProcess.emplace(srcNext.nextNodeName, 1);
+		}
+
+		while (!nodesToProcess.empty()) {
+			auto nextNode = nodesToProcess.top();
+			nodesToProcess.pop();
+
+			if (nodeToDist.contains(nextNode.first)) {
+				continue;
+			}
+
+			nodeToDist[nextNode.first] = nextNode.second;
+
+			if (destIds.contains(nextNode.first)) {
+				// save the distance
+				newLinks.emplace_back(NodeNameLink{ nextNode.first, nextNode.second });
+			} else {
+				for (auto links : input.nextNodesMap.at(nextNode.first)) {
+					nodesToProcess.emplace(links.nextNodeName, nextNode.second + 1);
+				}
+			}
+		}
+
+		graphNewNodeLinks[src] = newLinks;
+	}
+
+	std::multimap<int, std::string, std::greater<>> valveWeights;
+	for (auto& [nodeName, nodeId] : input.nameToId) {
+		if (input.graph[nodeId].flow_rate > 0) {
+			valveWeights.emplace(input.graph[nodeId].flow_rate, nodeName);
+		}
+	}
+
+	Map simplifiedMap;
+
+	simplifiedMap.nextNodesMap = graphNewNodeLinks;
+
+	for (auto& [nodeWeight, nodeName] : valveWeights) {
+		simplifiedMap.nameToId.emplace(nodeName, simplifiedMap.graph.size());
+
+		simplifiedMap.graph.emplace_back(Node{ nodeWeight, {} });
+	}
+
+	if (!simplifiedMap.nameToId.contains("AA")) {
+		simplifiedMap.nameToId.emplace("AA", simplifiedMap.graph.size());
+
+		simplifiedMap.graph.emplace_back(Node{ 0, {} });
+	}
+
+	for (auto& elem : simplifiedMap.nextNodesMap) {
+		auto& src = simplifiedMap.graph[simplifiedMap.nameToId[elem.first]];
+
+		for (auto& target : elem.second) {
+			src.nextNodes.emplace_back(simplifiedMap.nameToId[target.nextNodeName], target.weight);
+		}
+	}
+
+	return simplifiedMap;
+}
+
 int main(int argc, char* argv[]) {
 
 	std::filesystem::path mapPath;
@@ -167,6 +259,10 @@ int main(int argc, char* argv[]) {
 	fmt::print("Map has {} nodes\n", map.graph.size());
 
 	fmt::print("{}\n", mapToGraphviz(map));
+
+	auto simplifiedMap = simplifyMap(map);
+
+	fmt::print("{}\n", mapToGraphviz(simplifiedMap));
 
 	auto end = std::chrono::high_resolution_clock::now();
 
