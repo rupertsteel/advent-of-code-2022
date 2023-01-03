@@ -127,8 +127,11 @@ std::string mapToGraphviz(const SimpleMap& map) {
 	std::string returnStr = "digraph G {\n";
 
 	for (auto& [nodeName, flowRate] : map.flowRates) {
-
-		returnStr += fmt::format("    {} [{}];\n", nodeName, flowRate > 0 ? "style=filled, color=lightgrey" : "");
+		if (flowRate > 0) {
+			returnStr += fmt::format("    {0:} [style=\"filled\", color=\"lightgrey\", label=\"{0:}\\nflowrate={1:}\"];\n", nodeName, flowRate);
+		} else {
+			returnStr += fmt::format("    {} [];\n", nodeName);
+		}
 	}
 
 	returnStr += "\n\n";
