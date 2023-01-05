@@ -74,6 +74,7 @@ bool hasBitSet(uint64_t bitset, int bitNum) {
 
 struct Move {
 	bool openValve;
+	bool endWait;
 	int move;
 	int time;
 };
@@ -406,8 +407,42 @@ void addInitialStates(std::priority_queue<WorkItem>& priorityQueue, const Algori
 	//TODO
 }
 
-void getMoves(std::vector<Move>& moves, const AlgorithmMap& map, int rounds, int agentCurrentNode, int agentPrevNode, uint64_t valvesToOpen) {
-	//TODO
+void getMoves(std::vector<Move>& moves, const AlgorithmMap& map, int rounds, int agentCurrentNode, int agentPrevNode, int currentTime, uint64_t valvesToOpen) {
+	if (valvesToOpen & (1ull << agentCurrentNode)) {
+		moves.push_back(Move{
+			true,
+			false,
+			-1,
+			1
+		});
+	}
+
+	for (const auto& nextNode : map.graph[agentCurrentNode].nextNodes) {
+		if (nextNode.nextNode == agentPrevNode) {
+			continue;
+		}
+
+		if (currentTime + nextNode.weight >= rounds) {
+			continue; // can't reach it in time
+		}
+
+		moves.push_back(Move{
+			false,
+			false,
+			nextNode.nextNode,
+			nextNode.weight
+		});
+	}
+
+	if (moves.empty()) {
+		// add a backup move that waits for 1 turn so the other actor can finish.
+		moves.push_back(Move{
+			false,
+			true,
+			-1,
+			1
+		});
+	}
 }
 
 void applyMove(const Move& move, const AlgorithmMap& map, WorkItem& updateState, int& agentCurrentNode, int& agentPrevNode, int& agentArrivalTime, int rounds) {
@@ -420,10 +455,12 @@ void applyMove(const Move& move, const AlgorithmMap& map, WorkItem& updateState,
 		const auto valveFlowRate = map.graph[agentCurrentNode].flow_rate;
 
 		updateState.scoreLowerBound += valveFlowRate * (rounds - agentArrivalTime);
-	} else {
+	} else if (!move.endWait) {
 		agentPrevNode = agentCurrentNode;
 		agentCurrentNode = move.move;
 		agentArrivalTime += move.time;
+	} else {
+		agentArrivalTime++;
 	}
 }
 
@@ -491,6 +528,15 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 			continue;
 		}
 
+		if (state.minute + 1 == rounds) {
+			// no more moves possible
+			continue;
+		}
+		if (state.minute >= rounds) [[unlikely]] {
+			fmt::print("Minute over rounds\n");
+			return 0;
+		}
+
 		// expand future states
 		const bool needAgent1States = state.agent1Time <= state.agent2Time;
 		const bool needAgent2States = state.agent2Time <= state.agent1Time;
@@ -500,11 +546,11 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 
 		if (needAgent1States) {
 			agent1Moves.clear();
-			getMoves(agent1Moves, map, rounds, state.agent1CurrentNode, state.agent1PrevNode, state.valvesStillToOpen);
+			getMoves(agent1Moves, map, rounds, state.agent1CurrentNode, state.agent1PrevNode, state.minute, state.valvesStillToOpen);
 		}
 		if (needAgent2States) {
 			agent2Moves.clear();
-			getMoves(agent2Moves, map, rounds, state.agent2CurrentNode, state.agent2PrevNode, state.valvesStillToOpen);
+			getMoves(agent2Moves, map, rounds, state.agent2CurrentNode, state.agent2PrevNode, state.minute, state.valvesStillToOpen);
 		}
 
 		if (needAgent1States && needAgent2States) {
@@ -516,7 +562,7 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 					if (state.agent1CurrentNode == state.agent2CurrentNode && agent2Move.openValve) {
 						continue; // prefer agent1 to open valves
 					}
-					if (state.agent1CurrentNode == state.agent2CurrentNode && !agent1Move.openValve) {
+					if (state.agent1CurrentNode == state.agent2CurrentNode && !agent1Move.openValve && !agent1Move.endWait && !agent2Move.endWait) {
 						// prefer me moving to the lowest numbered next valve (we can both travel in the same direction though)
 						if (agent1Move.move > agent2Move.move) {
 							continue;
