@@ -362,7 +362,7 @@ AlgorithmMap toAlgorithmMap(const SimpleMap& input) {
 		algorithmMap.graph.emplace_back(Node{ nodeWeight, {} });
 
 		if (nodeWeight > 0) {
-			algorithmMap.valvesToOpen |= (1 << nodeId);
+			algorithmMap.valvesToOpen |= (1ull << nodeId);
 		}
 	}
 
@@ -385,6 +385,7 @@ AlgorithmMap toAlgorithmMap(const SimpleMap& input) {
 
 struct WorkItem {
 
+	uint64_t scoreLowerBound;
 	uint64_t scoreUpperBound;
 	int agent1CurrentNode;
 	int agent1PrevNode;
@@ -413,8 +414,40 @@ void applyMove(const Move& move, WorkItem& updateState, int& agentCurrentNode, i
 	//TODO
 }
 
-void updateUpperBound(WorkItem& workItem, const AlgorithmMap& map, int rounds) {
-	//TODO
+uint64_t calcUpperBoundScore(const WorkItem& workItem, const AlgorithmMap& map, int rounds) {
+	// simple upper bound,
+	// we assume that when each agent arrives at a node, it is the highest flow rate unopened node, so it is always optimal
+	// to open that node, and the next best nodes are only 1 cost away.
+
+	int agent1ArrivalTime = workItem.agent1Time;
+	int agent2ArrivalTime = workItem.agent2Time;
+
+	auto upperBoundScore = workItem.scoreLowerBound;
+
+	auto valvesToOpen = workItem.valvesStillToOpen;
+
+	while (valvesToOpen && agent1ArrivalTime < rounds && agent2ArrivalTime < rounds) {
+		const auto nextValveToOpen = std::countr_zero(valvesToOpen);
+		const auto valveFlowRate = map.graph[nextValveToOpen].flow_rate;
+
+		valvesToOpen ^= (1ull << nextValveToOpen);
+
+		if (agent1ArrivalTime <= agent2ArrivalTime) {
+			// run agent 1
+
+			// it will take us 1 round to open this valve
+			// so if rounds is 26, then the valve will be open on turn 1,
+			// so score = flow_rate * (rounds - agentArrivalTime - 1)
+			upperBoundScore += valveFlowRate * (rounds - agent1ArrivalTime - 1);
+			// it will take us 1 round to open the valve, and 1 to move to the next node.
+			agent1ArrivalTime += 2;
+		} else {
+			upperBoundScore += valveFlowRate * (rounds - agent2ArrivalTime - 1);
+			agent2ArrivalTime += 2;
+		}
+	}
+
+	return upperBoundScore;
 }
 
 uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
@@ -484,7 +517,7 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 
 					newState.minute += std::min(agent1Move.time, agent2Move.time);
 
-					updateUpperBound(newState, map, rounds);
+					newState.scoreUpperBound = calcUpperBoundScore(newState, map, rounds);
 
 					if (newState.scoreUpperBound < highestScore) {
 						solutionsRemovedBeforeAdd++;
@@ -502,7 +535,7 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 
 				newState.minute = std::min(newState.minute + agent1Move.time, newState.agent2Time);
 
-				updateUpperBound(newState, map, rounds);
+				newState.scoreUpperBound = calcUpperBoundScore(newState, map, rounds);
 
 				if (newState.scoreUpperBound < highestScore) {
 					solutionsRemovedBeforeAdd++;
@@ -519,7 +552,7 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 
 				newState.minute = std::min(newState.minute + agent2Move.time, newState.agent1Time);
 
-				updateUpperBound(newState, map, rounds);
+				newState.scoreUpperBound = calcUpperBoundScore(newState, map, rounds);
 
 				if (newState.scoreUpperBound < highestScore) {
 					solutionsRemovedBeforeAdd++;
