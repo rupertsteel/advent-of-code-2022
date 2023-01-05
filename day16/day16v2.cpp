@@ -410,8 +410,21 @@ void getMoves(std::vector<Move>& moves, const AlgorithmMap& map, int rounds, int
 	//TODO
 }
 
-void applyMove(const Move& move, WorkItem& updateState, int& agentCurrentNode, int& agentPrevNode) {
-	//TODO
+void applyMove(const Move& move, const AlgorithmMap& map, WorkItem& updateState, int& agentCurrentNode, int& agentPrevNode, int& agentArrivalTime, int rounds) {
+	if (move.openValve) {
+		updateState.valvesStillToOpen ^= (1ull << agentCurrentNode);
+
+		agentPrevNode = -1;
+		agentArrivalTime++;
+
+		const auto valveFlowRate = map.graph[agentCurrentNode].flow_rate;
+
+		updateState.scoreLowerBound += valveFlowRate * (rounds - agentArrivalTime);
+	} else {
+		agentPrevNode = agentCurrentNode;
+		agentCurrentNode = move.move;
+		agentArrivalTime += move.time;
+	}
 }
 
 uint64_t calcUpperBoundScore(const WorkItem& workItem, const AlgorithmMap& map, int rounds) {
@@ -512,8 +525,8 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 
 					auto newState = state;
 
-					applyMove(agent1Move, newState, newState.agent1CurrentNode, newState.agent1PrevNode);
-					applyMove(agent2Move, newState, newState.agent2CurrentNode, newState.agent2PrevNode);
+					applyMove(agent1Move, map, newState, newState.agent1CurrentNode, newState.agent1PrevNode, newState.agent1Time, rounds);
+					applyMove(agent2Move, map, newState, newState.agent2CurrentNode, newState.agent2PrevNode, newState.agent2Time, rounds);
 
 					newState.minute += std::min(agent1Move.time, agent2Move.time);
 
@@ -531,7 +544,7 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 			for (auto& agent1Move : agent1Moves) {
 				auto newState = state;
 
-				applyMove(agent1Move, newState, newState.agent1CurrentNode, newState.agent1PrevNode);
+				applyMove(agent1Move, map, newState, newState.agent1CurrentNode, newState.agent1PrevNode, newState.agent1Time, rounds);
 
 				newState.minute = std::min(newState.minute + agent1Move.time, newState.agent2Time);
 
@@ -548,7 +561,7 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 			for (auto& agent2Move : agent2Moves) {
 				auto newState = state;
 
-				applyMove(agent2Move, newState, newState.agent2CurrentNode, newState.agent2PrevNode);
+				applyMove(agent2Move, map, newState, newState.agent2CurrentNode, newState.agent2PrevNode, newState.agent2Time, rounds);
 
 				newState.minute = std::min(newState.minute + agent2Move.time, newState.agent1Time);
 
