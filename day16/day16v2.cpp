@@ -75,6 +75,7 @@ bool hasBitSet(uint64_t bitset, int bitNum) {
 struct Move {
 	bool openValve;
 	int move;
+	int time;
 };
 
 struct SimpleMap {
@@ -350,10 +351,19 @@ AlgorithmMap toAlgorithmMap(const SimpleMap& input) {
 		valveWeights.emplace(nodeFlowRate, nodeName);
 	}
 
+	if (input.flowRates.size() > 64) {
+		throw std::runtime_error("Too many nodes");
+	}
+
 	for (auto& [nodeWeight, nodeName] : valveWeights) {
-		algorithmMap.nameToId.emplace(nodeName, algorithmMap.graph.size());
+		auto nodeId = algorithmMap.graph.size();
+		algorithmMap.nameToId.emplace(nodeName, nodeId);
 
 		algorithmMap.graph.emplace_back(Node{ nodeWeight, {} });
+
+		if (nodeWeight > 0) {
+			algorithmMap.valvesToOpen |= (1 << nodeId);
+		}
 	}
 
 	if (!algorithmMap.nameToId.contains("AA")) {
@@ -371,6 +381,161 @@ AlgorithmMap toAlgorithmMap(const SimpleMap& input) {
 	}
 
 	return algorithmMap;
+}
+
+struct WorkItem {
+
+	uint64_t scoreUpperBound;
+	int agent1CurrentNode;
+	int agent1PrevNode;
+	int agent2CurrentNode;
+	int agent2PrevNode;
+	uint64_t valvesStillToOpen;
+	int minute;
+
+	int agent1Time;
+	int agent2Time;
+
+	std::strong_ordering operator<=>(const WorkItem& other) const {
+		return scoreUpperBound <=> other.scoreUpperBound;
+	}
+};
+
+void addInitialStates(std::priority_queue<WorkItem>& priorityQueue, const AlgorithmMap& map, uint64_t& highestScore) {
+	//TODO
+}
+
+void getMoves(std::vector<Move>& moves, const AlgorithmMap& map, int rounds, int agentCurrentNode, int agentPrevNode, uint64_t valvesToOpen) {
+	//TODO
+}
+
+void applyMove(const Move& move, WorkItem& updateState, int& agentCurrentNode, int& agentPrevNode) {
+	//TODO
+}
+
+void updateUpperBound(WorkItem& workItem, const AlgorithmMap& map, int rounds) {
+	//TODO
+}
+
+uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
+	std::priority_queue<WorkItem> itemsToProcess;
+
+	uint64_t highestScore = 0;
+
+	addInitialStates(itemsToProcess, map, highestScore);
+
+	size_t solutionsRemovedBeforeAdd = 0;
+	size_t solutionsRemovedOnProcess = 0;
+
+	size_t itemsProcessed = 0;
+
+	while (!itemsToProcess.empty()) {
+		auto state = itemsToProcess.top();
+		itemsToProcess.pop();
+
+		++itemsProcessed;
+
+		if (state.scoreUpperBound < highestScore) {
+			solutionsRemovedOnProcess++;
+
+			if ((itemsProcessed & 0xFFFF) == 0) {
+				fmt::print("{} items processed, {} in queue, Best upper bound {}\n", itemsProcessed, itemsToProcess.size(), highestScore);
+			}
+
+			continue;
+		}
+
+		// expand future states
+		const bool needAgent1States = state.agent1Time <= state.agent2Time;
+		const bool needAgent2States = state.agent2Time <= state.agent1Time;
+
+		static std::vector<Move> agent1Moves;
+		static std::vector<Move> agent2Moves;
+
+		if (needAgent1States) {
+			agent1Moves.clear();
+			getMoves(agent1Moves, map, rounds, state.agent1CurrentNode, state.agent1PrevNode, state.valvesStillToOpen);
+		}
+		if (needAgent2States) {
+			agent2Moves.clear();
+			getMoves(agent2Moves, map, rounds, state.agent2CurrentNode, state.agent2PrevNode, state.valvesStillToOpen);
+		}
+
+		if (needAgent1States && needAgent2States) {
+			for (auto& agent1Move : agent1Moves) {
+				for (auto& agent2Move : agent2Moves) {
+					if (agent1Move.openValve && agent2Move.openValve && state.agent1CurrentNode == state.agent2CurrentNode) {
+						continue; // both agents can't open the same valve
+					}
+					if (state.agent1CurrentNode == state.agent2CurrentNode && agent2Move.openValve) {
+						continue; // prefer agent1 to open valves
+					}
+					if (state.agent1CurrentNode == state.agent2CurrentNode && !agent1Move.openValve) {
+						// prefer me moving to the lowest numbered next valve (we can both travel in the same direction though)
+						if (agent1Move.move > agent2Move.move) {
+							continue;
+						}
+					}
+
+					auto newState = state;
+
+					applyMove(agent1Move, newState, newState.agent1CurrentNode, newState.agent1PrevNode);
+					applyMove(agent2Move, newState, newState.agent2CurrentNode, newState.agent2PrevNode);
+
+					newState.minute += std::min(agent1Move.time, agent2Move.time);
+
+					updateUpperBound(newState, map, rounds);
+
+					if (newState.scoreUpperBound < highestScore) {
+						solutionsRemovedBeforeAdd++;
+						continue;
+					}
+
+					itemsToProcess.push(newState);
+				}
+			}
+		} else if (needAgent1States) {
+			for (auto& agent1Move : agent1Moves) {
+				auto newState = state;
+
+				applyMove(agent1Move, newState, newState.agent1CurrentNode, newState.agent1PrevNode);
+
+				newState.minute = std::min(newState.minute + agent1Move.time, newState.agent2Time);
+
+				updateUpperBound(newState, map, rounds);
+
+				if (newState.scoreUpperBound < highestScore) {
+					solutionsRemovedBeforeAdd++;
+					continue;
+				}
+
+				itemsToProcess.push(newState);
+			}
+		} else if (needAgent2States) {
+			for (auto& agent2Move : agent2Moves) {
+				auto newState = state;
+
+				applyMove(agent2Move, newState, newState.agent2CurrentNode, newState.agent2PrevNode);
+
+				newState.minute = std::min(newState.minute + agent2Move.time, newState.agent1Time);
+
+				updateUpperBound(newState, map, rounds);
+
+				if (newState.scoreUpperBound < highestScore) {
+					solutionsRemovedBeforeAdd++;
+					continue;
+				}
+
+				itemsToProcess.push(newState);
+			}
+		}
+
+		if ((itemsProcessed & 0xFFFF) == 0) {
+			fmt::print("{} items processed, {} in queue, Best upper bound {}\n", itemsProcessed, itemsToProcess.size(), highestScore);
+		}
+	}
+
+	return highestScore;
 }
 
 int main(int argc, char* argv[]) {
@@ -396,8 +561,11 @@ int main(int argc, char* argv[]) {
 
 	auto algorithmMap = toAlgorithmMap(simplifiedMap);
 
+	auto twoAgentHighestScore = highestScoreTwoAgents(algorithmMap, numRounds);
+
 	auto end = std::chrono::high_resolution_clock::now();
 
+	fmt::print("2 agent result: {}\n", twoAgentHighestScore);
 
 	auto dur = end - start;
 
