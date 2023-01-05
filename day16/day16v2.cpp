@@ -601,6 +601,8 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 						continue;
 					}
 
+					highestScore = std::max(highestScore, newState.scoreLowerBound);
+
 					itemsToProcess.push(newState);
 				}
 			}
@@ -619,6 +621,8 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 					continue;
 				}
 
+				highestScore = std::max(highestScore, newState.scoreLowerBound);
+
 				itemsToProcess.push(newState);
 			}
 		} else if (needAgent2States) {
@@ -635,6 +639,8 @@ uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 					solutionsRemovedBeforeAdd++;
 					continue;
 				}
+
+				highestScore = std::max(highestScore, newState.scoreLowerBound);
 
 				itemsToProcess.push(newState);
 			}
