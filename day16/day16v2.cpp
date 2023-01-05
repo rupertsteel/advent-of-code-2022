@@ -403,8 +403,27 @@ struct WorkItem {
 	}
 };
 
-void addInitialStates(std::priority_queue<WorkItem>& priorityQueue, const AlgorithmMap& map, uint64_t& highestScore) {
-	//TODO
+uint64_t calcUpperBoundScore(const WorkItem& workItem, const AlgorithmMap& map, int rounds);
+
+void addInitialStates(std::priority_queue<WorkItem>& priorityQueue, const AlgorithmMap& map, int rounds) {
+	const auto startNode = map.nameToId.at("AA");
+
+	WorkItem initialState{
+		0,
+		0, // Will be updated
+		startNode,
+		-1,
+		startNode,
+		-1,
+		map.valvesToOpen,
+		0,
+		0,
+		0
+	};
+
+	initialState.scoreUpperBound = calcUpperBoundScore(initialState, map, rounds);
+
+	priorityQueue.push(initialState);
 }
 
 void getMoves(std::vector<Move>& moves, const AlgorithmMap& map, int rounds, int agentCurrentNode, int agentPrevNode, int currentTime, uint64_t valvesToOpen) {
@@ -503,14 +522,13 @@ uint64_t calcUpperBoundScore(const WorkItem& workItem, const AlgorithmMap& map, 
 uint64_t highestScoreTwoAgents(const AlgorithmMap& map, int rounds) {
 	std::priority_queue<WorkItem> itemsToProcess;
 
-	uint64_t highestScore = 0;
-
-	addInitialStates(itemsToProcess, map, highestScore);
+	addInitialStates(itemsToProcess, map, rounds);
 
 	size_t solutionsRemovedBeforeAdd = 0;
 	size_t solutionsRemovedOnProcess = 0;
 
 	size_t itemsProcessed = 0;
+	uint64_t highestScore = 0;
 
 	while (!itemsToProcess.empty()) {
 		auto state = itemsToProcess.top();
